@@ -96,6 +96,9 @@ CREATE TABLE IF NOT EXISTS fb_group (
     url         TEXT    NOT NULL UNIQUE,
     note        TEXT    NOT NULL DEFAULT '',
     enabled     INTEGER NOT NULL DEFAULT 1,
+    -- Nhiều nhóm xoá thẳng bài có link ra ngoài. Với nhóm đó, nội dung sao chép ra
+    -- không kèm link — người quan tâm tự tìm tên Page.
+    no_link     INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT    NOT NULL
 );
 
@@ -155,6 +158,7 @@ _ADDED_COLUMNS = (
     # lại là ra hai bài trùng trên Fanpage.
     ("post", "threads_id", "TEXT"),
     ("post", "threads_status", "TEXT NOT NULL DEFAULT 'none'"),  # none|posted|failed
+    ("fb_group", "no_link", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 

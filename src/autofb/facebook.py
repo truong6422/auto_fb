@@ -68,6 +68,11 @@ def classify_meta_error(body: dict, status_code: int) -> Exception:
 class PageInfo:
     id: str
     name: str
+    followers: int = 0
+
+    @property
+    def link(self) -> str:
+        return f"https://www.facebook.com/{self.id}"
 
 
 @dataclass(frozen=True)
@@ -135,8 +140,12 @@ class FacebookClient:
 
         Chỉ đọc, không đăng gì — an toàn để chạy định kỳ làm health-check.
         """
-        body = self._request("GET", f"{self.page_id}?fields=id,name")
-        return PageInfo(id=str(body.get("id", "")), name=body.get("name", ""))
+        # Lấy luôn số người theo dõi trong cùng một lời gọi: đây là thước đo duy nhất
+        # cho biết việc chia sẻ nhóm có tác dụng thật hay không, mà xin thêm nó không
+        # tốn thêm request nào.
+        body = self._request("GET", f"{self.page_id}?fields=id,name,followers_count")
+        return PageInfo(id=str(body.get("id", "")), name=body.get("name", ""),
+                        followers=int(body.get("followers_count") or 0))
 
     def recent_posts(self, limit: int = 25) -> list[PagePost]:
         """Các bài mới nhất trên Fanpage.

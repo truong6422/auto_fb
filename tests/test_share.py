@@ -27,7 +27,8 @@ def conn(tmp_path):
 
 
 def feed(*ids):
-    return [{"id": i, "headline": f"bài {i}", "age": "1 giờ trước",
+    return [{"id": i, "headline": f"bài {i}", "message": f"nội dung bài {i}",
+             "age": "1 giờ trước",
              "permalink": f"https://facebook.com/{i}", "picture": "",
              "reactions": 0, "comments": 0, "shares": 0} for i in ids]
 
@@ -84,3 +85,48 @@ class TestGhiNhoDaChiaSe:
         conn.execute("DELETE FROM fb_group WHERE id = 1")
         conn.commit()
         assert share.build_context(conn, feed("1_9"), "1_9")["done_count"] == 0
+
+
+class TestNoiDungSaoChep:
+    """Câu chốt là chỗ duy nhất biến người đọc trong nhóm thành người theo dõi Page."""
+
+    def test_giu_nguyen_ca_bai_roi_moi_them_cau_chot(self):
+        text = share.share_text("Arsenal 2 - 1 Chelsea\nEverton 2 - 2 Man Utd",
+                                "Ghé nhé: {link}", "Sport Hub", "https://fb.com/1")
+        assert text.startswith("Arsenal 2 - 1 Chelsea\nEverton 2 - 2 Man Utd")
+        assert text.endswith("Ghé nhé: https://fb.com/1")
+
+    def test_ban_cho_nhom_cam_link_khong_co_dia_chi(self):
+        """Nhiều nhóm xoá thẳng bài có link — bản này phải sạch link."""
+        text = share.share_text("nội dung", share.DEFAULT_CTA_NOLINK,
+                                "Sport Hub", "https://fb.com/1")
+        assert "https://" not in text and "Sport Hub" in text
+
+    def test_bai_khong_co_chu_van_ra_duoc_cau_chot(self):
+        assert share.share_text("", "Ghé nhé: {link}", "X", "https://fb.com/1").strip()
+
+    def test_hai_ban_deu_duoc_dung_san(self, conn):
+        ctx = share.build_context(conn, feed("1_9"), "1_9", "Sport Hub", "https://fb.com/1")
+        assert "https://fb.com/1" in ctx["text_link"]
+        assert "https://" not in ctx["text_nolink"]
+
+    def test_sua_cau_chot_thi_noi_dung_doi_theo(self, conn):
+        conn.execute("INSERT INTO setting (key, value, updated_at)"
+                     " VALUES (?, 'Theo dõi mình nhé', '2026-09-09')", (share.CTA_KEY,))
+        conn.commit()
+        ctx = share.build_context(conn, feed("1_9"), "1_9", "Sport Hub", "https://fb.com/1")
+        assert ctx["text_link"].endswith("Theo dõi mình nhé")
+
+
+class TestNhacViec:
+    def test_dem_bai_chua_vao_nhom_nao(self, conn):
+        conn.execute("INSERT INTO group_share (fb_post_id, group_id, shared_at)"
+                     " VALUES ('1_9', 1, '2026-09-09')")
+        conn.commit()
+        assert share.unshared_count(conn, feed("1_9", "1_8", "1_7")) == 2
+
+    def test_chia_se_het_thi_khong_con_nhac(self, conn):
+        conn.execute("INSERT INTO group_share (fb_post_id, group_id, shared_at)"
+                     " VALUES ('1_9', 1, '2026-09-09')")
+        conn.commit()
+        assert share.unshared_count(conn, feed("1_9")) == 0

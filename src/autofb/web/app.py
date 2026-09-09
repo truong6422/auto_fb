@@ -30,7 +30,9 @@ from .auth import BasicAuthMiddleware
 from .fanpage_feed import (
     LIMIT as feed_limit, forget as forget_feed, recent_posts as fanpage_posts,
 )
-from .share import build_context as share_context, router as share_router
+from .share import (
+    build_context as share_context, router as share_router, unshared_count,
+)
 from .state import SystemState
 
 # Nạp .env NGAY khi import: middleware xác thực đọc AUTOFB_PASSWORD từ os.environ,
@@ -132,6 +134,7 @@ def _fanpage_items() -> tuple[list[dict], str]:
     posts, error = fanpage_posts()
     items = [{
         "id": post.id,
+        "message": post.message,
         # Facebook trả "2026-09-09T09:35:02+0000" — fromisoformat đọc được từ 3.11.
         "age": _humanize_age(post.created_time),
         "headline": (post.message.split("\n")[0] if post.message else "(bài không có chữ)"),
@@ -174,7 +177,8 @@ def _facebook_status() -> dict:
         return {"ok": False, "text": f"Token hỏng: {exc}"}
     except TransientError:
         return {"ok": False, "text": "Không kết nối được tới Facebook"}
-    return {"ok": True, "text": f"{page.name} · token {fb.masked_token}"}
+    return {"ok": True, "text": f"{page.name} · token {fb.masked_token}",
+            "name": page.name, "link": page.link, "followers": page.followers}
 
 
 @app.get("/")
@@ -199,6 +203,9 @@ def index(request: Request, tab: str = "queue"):
         config = effective_config(conn)
         plan = decide(config, conn)
         counts = _counts(conn)
+        # Bài đã lên Page mà chưa mang vào nhóm nào — việc còn dở, phải nhìn thấy được
+        # trên bảng điều khiển chứ không phải mở trang khác mới biết.
+        counts["unshared"] = unshared_count(conn, feed) if counts["groups_active"] else 0
         if not feed_error:
             # Kéo được đủ LIMIT bài nghĩa là Fanpage còn nữa ở phía sau — ghi "25+"
             # chứ không ghi "25", đó là con số sàn chứ không phải tổng số bài.
@@ -477,10 +484,12 @@ def share_page(request: Request, post: str = ""):
     trên Page, mà Page còn có cả bài không do AutoFB đăng.
     """
     feed, feed_error = _fanpage_items()
+    fb = _facebook_status()
     with db.session() as conn:
-        context = share_context(conn, feed, post)
+        context = share_context(conn, feed, post,
+                                page_name=fb.get("name", ""), page_link=fb.get("link", ""))
         context.update(counts=_counts(conn), paused=state.paused, page="share",
-                       labels=SPORT_LABELS, feed_error=feed_error)
+                       labels=SPORT_LABELS, feed_error=feed_error, fb=fb)
     return templates.TemplateResponse(request=request, name="share.html", context=context)
 
 

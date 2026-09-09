@@ -24,6 +24,35 @@ router = APIRouter()
 # mà danh sách dài cũng không ai cuộn.
 RECENT_POSTS = 8
 
+CTA_KEY = "share_cta"
+CTA_NOLINK_KEY = "share_cta_nolink"
+
+# Câu chốt mặc định. Dán nguyên văn bài trên Page vào nhóm thì người đọc xong là đi,
+# không có lý do gì để bấm theo dõi — câu này là chỗ duy nhất biến người đọc thành
+# người theo dõi, nên nó phải sửa được mà không cần đụng vào code.
+DEFAULT_CTA = ("Mình tổng hợp kết quả, lịch thi đấu và bảng xếp hạng mỗi tuần ở đây,"
+               " ai cần thì ghé nhé: {link}")
+# Nhóm cấm link thì câu trên bị xoá bài. Nhắc tên Page để người quan tâm tự tìm.
+DEFAULT_CTA_NOLINK = ("Mình tổng hợp kết quả, lịch thi đấu và bảng xếp hạng mỗi tuần"
+                      " trên trang {name}, ai cần thì tìm tên đó trên Facebook nhé.")
+
+
+def _setting(conn, key: str, fallback: str) -> str:
+    row = conn.execute("SELECT value FROM setting WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row and row["value"] else fallback
+
+
+def share_text(message: str, cta: str, page_name: str, page_link: str) -> str:
+    """Nội dung dán vào nhóm: nguyên bài trên Page + câu chốt kéo người theo dõi.
+
+    Giữ nguyên bài chứ không rút gọn: trong nhóm, bài đọc trọn vẹn ngay tại chỗ thì
+    người ta dừng lại đọc, còn một dòng tiêu đề kèm link thì đa số lướt qua — mà nhiều
+    nhóm cũng dìm bài có link.
+    """
+    body = (message or "").strip()
+    tail = cta.replace("{link}", page_link).replace("{name}", page_name).strip()
+    return f"{body}\n\n{tail}" if tail else body
+
 
 def list_groups(conn) -> list[dict]:
     return [dict(row) for row in conn.execute(
@@ -50,7 +79,8 @@ def share_counts(conn, fb_post_ids: list[str]) -> dict[str, int]:
     )}
 
 
-def build_context(conn, feed: list[dict], chosen_id: str) -> dict:
+def build_context(conn, feed: list[dict], chosen_id: str,
+                  page_name: str = "", page_link: str = "") -> dict:
     """Dữ liệu cho màn hình chia sẻ. `feed` là bài lấy từ Fanpage (fanpage_feed.py)."""
     posts = feed[:RECENT_POSTS]
     chosen = next((p for p in posts if p["id"] == chosen_id), posts[0] if posts else None)
@@ -60,6 +90,10 @@ def build_context(conn, feed: list[dict], chosen_id: str) -> dict:
     for group in groups:
         group["shared"] = group["id"] in done
 
+    cta = _setting(conn, CTA_KEY, DEFAULT_CTA)
+    cta_nolink = _setting(conn, CTA_NOLINK_KEY, DEFAULT_CTA_NOLINK)
+    message = chosen["message"] if chosen else ""
+
     return {
         "posts": posts,
         "counts_by_post": share_counts(conn, [p["id"] for p in posts]),
@@ -68,7 +102,20 @@ def build_context(conn, feed: list[dict], chosen_id: str) -> dict:
         "groups": sorted(groups, key=lambda g: (g["shared"], not g["enabled"])),
         "done_count": sum(1 for g in groups if g["shared"] and g["enabled"]),
         "active_count": sum(1 for g in groups if g["enabled"]),
+        "cta": cta,
+        "cta_nolink": cta_nolink,
+        # Dựng sẵn hai bản: nhóm cho phép link và nhóm cấm link. Bấm nút là có ngay,
+        # không phải chờ gọi thêm gì.
+        "text_link": share_text(message, cta, page_name, page_link),
+        "text_nolink": share_text(message, cta_nolink, page_name, page_link),
     }
+
+
+def unshared_count(conn, feed: list[dict]) -> int:
+    """Bao nhiêu bài gần đây chưa vào nhóm nào — con số nhắc việc trên bảng điều khiển."""
+    posts = feed[:RECENT_POSTS]
+    counts = share_counts(conn, [p["id"] for p in posts])
+    return sum(1 for p in posts if not counts.get(p["id"]))
 
 
 @router.post("/share/groups/add")
@@ -82,6 +129,29 @@ def add_group(name: str = Form(...), url: str = Form(...), note: str = Form(""))
                 (name, url, note.strip(), datetime.now(timezone.utc).isoformat()),
             )
             conn.commit()
+    return RedirectResponse("/share", status_code=303)
+
+
+@router.post("/share/cta")
+def save_cta(cta: str = Form(""), cta_nolink: str = Form("")):
+    now = datetime.now(timezone.utc).isoformat()
+    with db.session() as conn:
+        for key, value in ((CTA_KEY, cta), (CTA_NOLINK_KEY, cta_nolink)):
+            conn.execute(
+                "INSERT INTO setting (key, value, updated_at) VALUES (?, ?, ?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value,"
+                " updated_at = excluded.updated_at",
+                (key, value.strip(), now),
+            )
+        conn.commit()
+    return RedirectResponse("/share", status_code=303)
+
+
+@router.post("/share/groups/{group_id}/nolink")
+def toggle_nolink(group_id: int):
+    with db.session() as conn:
+        conn.execute("UPDATE fb_group SET no_link = 1 - no_link WHERE id = ?", (group_id,))
+        conn.commit()
     return RedirectResponse("/share", status_code=303)
 
 

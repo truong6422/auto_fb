@@ -49,6 +49,26 @@
   .g .tick { color:var(--ok); font-size:12.5px; font-weight:600; }
   .g .more { margin-left:auto; display:flex; gap:4px; }
   .empty { padding:22px; text-align:center; color:var(--faint); font-size:13.5px; }
+  .nolink { font-size:10.5px; font-weight:600; color:var(--warn); border-radius:5px;
+            padding:1px 6px; margin-left:6px; vertical-align:middle;
+            background:color-mix(in srgb, var(--warn) 16%, transparent); }
+
+  /* ---- câu chốt ---- */
+  .cta { background:var(--surface); border:1px solid var(--line-soft); border-radius:14px;
+         padding:14px 18px; margin-bottom:16px; }
+  .cta summary { cursor:pointer; font-size:13.5px; font-weight:500; color:var(--muted);
+                 list-style:none; user-select:none; }
+  .cta summary::-webkit-details-marker { display:none; }
+  .cta summary::before { content:"✎ "; }
+  .cta summary:hover { color:var(--text); }
+  .cta[open] summary { margin-bottom:11px; color:var(--text); }
+  .cta .hint { font-size:12.5px; color:var(--muted); line-height:1.6; margin-bottom:11px; }
+  .cta code { background:var(--raised); border-radius:4px; padding:1px 5px; font-size:12px; }
+  .cta label { display:block; font-size:12px; color:var(--faint); margin:9px 0 4px; }
+  .prev { background:var(--bg); border:1px solid var(--line-soft); border-radius:10px;
+          padding:12px 14px; font-size:12.5px; line-height:1.65; white-space:pre-wrap;
+          word-break:break-word; color:var(--muted); margin:0; max-height:260px;
+          overflow:auto; }
 {% endblock %}
 
 {% block content %}
@@ -103,31 +123,57 @@
       <div class="fill" id="fill"
            style="width:{{ (done_count / active_count * 100) if active_count else 0 }}%"></div>
     </div>
-    <button class="small cp" type="button" onclick="salin()">Sao chép nội dung</button>
+    <button class="small cp" type="button" onclick="salin(false)">Sao chép nội dung</button>
   </div>
 
-  {# Nội dung để dán vào nhóm: chữ của bài + link bài trên Page. Có link thì người
-     trong nhóm bấm vào là về Page, đó mới là chỗ kéo người theo dõi. #}
+  {# Hai bản nội dung dựng sẵn: nhóm cho phép link và nhóm cấm link. Nút bấm chọn
+     đúng bản của nhóm đó, không phải sửa tay từng lần. #}
   <textarea id="src" style="position:absolute; left:-9999px" aria-hidden="true"
-  >{{ chosen.headline }}
+  >{{ text_link }}</textarea>
+  <textarea id="srcnl" style="position:absolute; left:-9999px" aria-hidden="true"
+  >{{ text_nolink }}</textarea>
 
-{{ chosen.permalink }}</textarea>
+  <details class="cta">
+    <summary>Xem trước &amp; sửa câu chốt</summary>
+    <div class="hint">
+      Đây là chỗ duy nhất biến người đọc trong nhóm thành người theo dõi Page. Dán trần
+      bài lên nhóm thì đọc xong người ta đi luôn.
+      <code>{link}</code> = địa chỉ Page, <code>{name}</code> = tên Page.
+    </div>
+    <form method="post" action="/share/cta">
+      <label>Câu chốt (nhóm cho phép link)</label>
+      <input type="text" name="cta" value="{{ cta }}">
+      <label>Câu chốt (nhóm cấm link)</label>
+      <input type="text" name="cta_nolink" value="{{ cta_nolink }}">
+      <div style="margin-top:9px"><button class="primary small" type="submit">Lưu</button></div>
+    </form>
+    <label style="margin-top:14px; display:block">Nội dung sẽ được sao chép</label>
+    <pre class="prev">{{ text_link }}</pre>
+  </details>
 
   <div class="grid">
     {% for g in groups %}
       <div class="g {{ 'done' if g.shared }} {{ '' if g.enabled else 'off' }}" id="g{{ g.id }}">
-        <div class="nm">{{ g.name }}</div>
+        <div class="nm">{{ g.name }}
+          {% if g.no_link %}<span class="nolink">cấm link</span>{% endif %}
+        </div>
         <div class="nt">{{ g.note }}</div>
         <div class="btns">
           {# Địa chỉ nhóm đi qua data-url chứ không nhét thẳng vào onclick: URL do người
              dùng gõ, ghép chuỗi vào JS là mở đường chèn mã. #}
-          <button class="small go openg" type="button"
-                  data-id="{{ g.id }}" data-url="{{ g.url }}">Mở &amp; sao chép</button>
+          <button class="small go openg" type="button" data-id="{{ g.id }}"
+                  data-url="{{ g.url }}" data-nolink="{{ 1 if g.no_link else 0 }}"
+                  >Mở &amp; sao chép</button>
           <span class="tick" style="{{ '' if g.shared else 'display:none' }}"
                 id="t{{ g.id }}">✓ đã chia sẻ</span>
           <button class="small undog" type="button" id="u{{ g.id }}" data-id="{{ g.id }}"
                   style="{{ '' if g.shared else 'display:none' }}">Bỏ đánh dấu</button>
           <span class="more">
+            <form class="inline" method="post" action="/share/groups/{{ g.id }}/nolink">
+              <button class="small" type="submit"
+                      title="Nhóm xoá bài có link thì bật cái này — bản sao chép sẽ bỏ link"
+                      >{{ 'Cho link' if g.no_link else 'Cấm link' }}</button>
+            </form>
             <form class="inline" method="post" action="/share/groups/{{ g.id }}/toggle">
               <button class="small" type="submit">{{ 'Tắt' if g.enabled else 'Bật' }}</button>
             </form>
@@ -147,8 +193,8 @@
 const BAI = {{ chosen.id|tojson }};
 const TONG = {{ active_count }};
 
-function salin() {
-  const t = document.getElementById('src');
+function salin(nolink) {
+  const t = document.getElementById(nolink ? 'srcnl' : 'src');
   // navigator.clipboard cần HTTPS; trang chạy sau Cloudflare Tunnel nên có. Vẫn giữ
   // đường lui execCommand cho trình duyệt cũ, không thì bấm xong không có gì xảy ra.
   if (navigator.clipboard) { navigator.clipboard.writeText(t.value); return; }
@@ -170,7 +216,7 @@ async function danhDau(id, undo) {
 }
 
 document.querySelectorAll('.openg').forEach(b => b.addEventListener('click', () => {
-  salin();
+  salin(b.dataset.nolink === '1');
   danhDau(Number(b.dataset.id), false);
   // Mở tab mới thay vì chuyển trang: chia sẻ xong quay lại là còn nguyên danh sách,
   // không phải chọn lại bài từ đầu.
