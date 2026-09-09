@@ -8,12 +8,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from autofb import db  # noqa: E402
-from autofb.config import load_config  # noqa: E402
 from autofb.crawler.pipeline import run_crawl  # noqa: E402
 from autofb.facebook import FacebookClient, PermanentError, TransientError  # noqa: E402
 from autofb.post_pipeline import build_pending_posts  # noqa: E402
 from autofb.autopilot import run_tick  # noqa: E402
 from autofb.publisher import publish_approved, retry_failed_comments  # noqa: E402
+from autofb.runtime_settings import effective_config  # noqa: E402
 from autofb.fb_setup import exchange_for_long_lived, inspect_token, upsert_env  # noqa: E402
 from autofb.settings import ENV_PATH, load_facebook_settings, silence_token_leak  # noqa: E402
 
@@ -42,8 +42,6 @@ def main() -> int:
         format="%(levelname)-7s %(message)s",
     )
     silence_token_leak()
-
-    config = load_config()
 
     if args.command == "check-token":
         return check_token()
@@ -79,6 +77,11 @@ def main() -> int:
         return 0
 
     with db.session() as conn:
+        # Thông số nhịp chạy lấy từ DB (trang Cài đặt) đè lên sources.yaml — dòng lệnh
+        # phải thấy đúng cấu hình mà hai container nền đang dùng, nếu không chạy tay
+        # một lượt lại ra kết quả khác lượt tự động.
+        config = effective_config(conn)
+
         if args.command == "crawl":
             report = run_crawl(config, conn)
             print("\n" + report.summary())
@@ -105,7 +108,7 @@ def main() -> int:
             if client is None:
                 return 1
             report = (
-                publish_approved(client, conn, args.limit)
+                publish_approved(client, conn, args.limit, config.card)
                 if args.command == "publish"
                 else retry_failed_comments(client, conn)
             )

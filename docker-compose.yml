@@ -56,6 +56,10 @@ services:
     restart: unless-stopped
     volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
     environment:
+      # containrrr/watchtower 1.7.1 (2023) mặc định nói chuyện với Docker API 1.25,
+      # mà Docker 29 trên box chỉ chấp nhận từ 1.40 trở lên. Ghim phiên bản API ở đây
+      # thay vì đổi sang một bản fork của bên thứ ba.
+      DOCKER_API_VERSION: "1.44"
       # 30 phút một lần là đủ: build trên GitHub Actions xong vài phút sau box tự lấy.
       WATCHTOWER_POLL_INTERVAL: 1800
       WATCHTOWER_LABEL_ENABLE: "true"
