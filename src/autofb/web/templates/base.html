@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}AutoFB{% endblock %}</title>
+<style>
+  /* ============ hệ màu ============
+     Nền tối mặc định. Các lớp bề mặt chênh nhau rất ít để tạo chiều sâu mà không
+     làm giao diện lốm đốm. Nền sáng chỉ bật khi người dùng tự chọn. */
+  :root, :root[data-theme="dark"] {
+    --bg:#0b0e13;  --surface:#141922;  --raised:#1b2029;  --hover:#212836;
+    --line:#242b37; --line-soft:#1c222c;
+    --text:#eceef2; --muted:#8d98a8;  --faint:#5a6474;
+    --accent:#5aa2ff; --accent-dim:#16304f;
+    --ok:#42d392; --warn:#ff7a7a; --amber:#f5b544;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+  :root[data-theme="light"] {
+    --bg:#f4f6f9;  --surface:#ffffff;  --raised:#f1f4f8;  --hover:#e9eef5;
+    --line:#e0e5ec; --line-soft:#edf0f4;
+    --text:#161a21; --muted:#5f6b7c;  --faint:#96a1b0;
+    --accent:#1b74e4; --accent-dim:#dceafd;
+    --ok:#15a05f; --warn:#d64545; --amber:#b26a00;
+    --shadow:0 1px 2px rgba(16,24,40,.06), 0 8px 24px -12px rgba(16,24,40,.14);
+  }
+
+  /* Mỗi môn một màu riêng: nhìn lướt danh sách là nhận ra chủ đề, feed đỡ đơn điệu. */
+  .s-football{--tone:#42d392}   .s-tennis{--tone:#f5b544}
+  .s-pickleball{--tone:#5aa2ff} .s-badminton{--tone:#c07af0}
+  .s-running{--tone:#ff8a5b}    .s-cycling{--tone:#3fc8d4}
+  .s-gym{--tone:#98a3b3}        .s-basketball{--tone:#ff7a4d}
+  .s-other{--tone:#7d8aa0}
+
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+         -webkit-font-smoothing:antialiased; letter-spacing:-.005em; }
+  a { color:var(--accent); }
+  h1,h2,h3 { letter-spacing:-.02em; }
+
+  /* ============ thanh trên ============
+     Hai hàng cố định: hàng 1 nhận diện + nút hành động, hàng 2 là menu chuyển trang.
+     Trước đây tất cả nằm chung một hàng có flex-wrap, nên trên điện thoại nút "Dừng"
+     bị đẩy xuống nằm lẫn vào menu — thứ nguy hiểm nhất lại ở chỗ dễ bấm nhầm nhất. */
+  header { background:color-mix(in srgb, var(--surface) 92%, transparent);
+           backdrop-filter:blur(12px); border-bottom:1px solid var(--line-soft);
+           position:sticky; top:0; z-index:30; }
+  .bar { max-width:980px; margin:0 auto; padding:11px 20px 0;
+         display:flex; align-items:center; gap:12px; }
+  .logo { font-weight:700; font-size:16.5px; letter-spacing:-.03em; text-decoration:none;
+          color:var(--text); display:flex; align-items:center; gap:8px; margin-right:auto; }
+  .logo .mark { width:9px; height:9px; border-radius:3px; background:var(--accent);
+                transform:rotate(45deg); }
+  .logo small { color:var(--faint); font-weight:500; font-size:12px; letter-spacing:0; }
+  .acts { display:flex; align-items:center; gap:7px; flex:none; }
+
+  /* ---- menu ---- */
+  .navwrap { max-width:980px; margin:0 auto; padding:0 20px;
+             /* Trên màn hình hẹp menu trượt ngang thay vì xuống dòng: chiều cao
+                thanh trên không đổi thì nội dung bên dưới không bị nhảy. */
+             overflow-x:auto; scrollbar-width:none; }
+  .navwrap::-webkit-scrollbar { display:none; }
+  .nav { display:flex; gap:3px; }
+  .nav a { display:flex; align-items:center; gap:7px; white-space:nowrap;
+           padding:11px 12px 10px; text-decoration:none; font-size:14px;
+           color:var(--muted); font-weight:500; transition:.15s;
+           border-bottom:2px solid transparent; }
+  .nav a svg { width:16px; height:16px; flex:none; stroke:currentColor; fill:none;
+               stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+  .nav a:hover { color:var(--text); }
+  /* Gạch chân thay vì nền: người dùng đọc thanh menu theo hàng ngang, một đường
+     kẻ dưới chỉ đúng một mục rõ hơn là một mảng nền dễ lẫn với nút bấm. */
+  .nav a.on { color:var(--accent); border-bottom-color:var(--accent); }
+
+  /* Đếm số bài đang chờ, gắn ngay cạnh mục menu — không phải mở trang mới biết. */
+  .nav .n { font-size:11px; font-weight:700; padding:1px 6px; border-radius:20px;
+            background:var(--raised); color:var(--muted); }
+  .nav a.on .n { background:var(--accent-dim); color:var(--accent); }
+
+  @media (max-width:560px) {
+    .bar { padding:10px 14px 0; }
+    .navwrap { padding:0 14px; }
+    .logo small { display:none; }
+  }
+
+  /* ============ nút ============ */
+  button, .btn { font:inherit; font-size:14px; font-weight:500; border:1px solid transparent;
+                 border-radius:9px; padding:8px 15px; cursor:pointer; transition:.15s;
+                 background:var(--raised); color:var(--text); }
+  button:hover { background:var(--hover); }
+  button:active { transform:translateY(1px); }
+  .primary { background:var(--accent); color:#fff; }
+  .primary:hover { filter:brightness(1.12); background:var(--accent); }
+  .go { background:var(--ok); color:#04170e; font-weight:600; }
+  .go:hover { filter:brightness(1.1); background:var(--ok); }
+  .danger { background:transparent; color:var(--warn); border-color:var(--line); }
+  .danger:hover { background:color-mix(in srgb, var(--warn) 12%, transparent); }
+  .icon { background:transparent; border-color:var(--line); padding:8px 10px;
+          color:var(--muted); display:inline-flex; align-items:center; }
+  .icon:hover { color:var(--text); background:var(--raised); }
+  .small { font-size:13px; padding:6px 12px; border-radius:8px; }
+
+  /* Cùng bề ngang với thanh trên, nếu không menu và nội dung lệch mép nhau. */
+  main { max-width:980px; margin:0 auto; padding:22px 20px 60px; }
+  @media (max-width:560px) { main { padding:18px 14px 60px; } }
+
+  /* ============ khối ============ */
+  .card { background:var(--surface); border:1px solid var(--line-soft); border-radius:14px;
+          margin-bottom:16px; overflow:hidden; box-shadow:var(--shadow); }
+
+  .chip { display:inline-flex; align-items:center; font-size:11.5px; font-weight:600;
+          padding:3px 9px; border-radius:6px;
+          color:var(--tone, var(--accent));
+          background:color-mix(in srgb, var(--tone, var(--accent)) 15%, transparent); }
+  .dim { font-size:12.5px; color:var(--faint); }
+  .spacer { margin-left:auto; }
+  form.inline { display:inline; }
+
+  /* ============ nhập liệu ============ */
+  input[type=url], input[type=text], input[type=number],
+  input[type=datetime-local], select, textarea {
+      width:100%; border:1px solid var(--line); border-radius:10px; padding:10px 13px;
+      font:inherit; background:var(--bg); color:var(--text); transition:.15s; }
+  input:hover, select:hover, textarea:hover { border-color:var(--faint); }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent);
+      box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+  ::placeholder { color:var(--faint); }
+  label { display:block; font-size:12.5px; color:var(--muted); font-weight:500;
+          margin:14px 0 6px; }
+
+  .banner { background:color-mix(in srgb, var(--warn) 14%, transparent); color:var(--warn);
+            padding:11px; text-align:center; font-weight:600; font-size:13.5px; }
+  .empty { text-align:center; color:var(--muted); padding:64px 24px; font-size:14px; }
+  .empty b { color:var(--text); }
+{% block style %}{% endblock %}
+</style>
+</head>
+<body>
+
+{% if paused %}<div class="banner">Hệ thống đang tạm dừng — không bài nào được đăng</div>{% endif %}
+
+<header>
+  <div class="bar">
+    <a class="logo" href="/">
+      <span class="mark"></span>AutoFB <small>Sport Hub</small>
+    </a>
+    <div class="acts">
+      {% block kpi %}{% endblock %}
+      <button class="icon" id="theme" title="Đổi nền sáng/tối" aria-label="Đổi nền sáng tối">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="1.9" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3
+             a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <form class="inline" method="post" action="/toggle-pause">
+        <button class="{{ 'primary' if paused else 'danger' }}" type="submit"
+                title="{{ 'Cho hệ thống chạy lại' if paused else 'Dừng khẩn cấp — không đăng bài nào nữa' }}">
+          {{ 'Chạy lại' if paused else 'Dừng' }}
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="navwrap">
+    <nav class="nav">
+      {# Số bên cạnh là thứ cần liếc thấy nhất ở mỗi mục: bao nhiêu bài đang chờ,
+         bao nhiêu bài hẹn giờ, bao nhiêu link đang bật. #}
+      <a href="/" class="{{ 'on' if page == 'posts' }}">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/>
+          <rect x="14" y="3" width="7" height="5" rx="1.5"/>
+          <rect x="14" y="12" width="7" height="9" rx="1.5"/>
+          <rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        Bảng điều khiển
+        {% if counts and counts.approved %}<span class="n">{{ counts.approved }}</span>{% endif %}
+      </a>
+      <a href="/compose" class="{{ 'on' if page == 'compose' }}">
+        <svg viewBox="0 0 24 24"><path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        Bài tự soạn
+      </a>
+      <a href="/links" class="{{ 'on' if page == 'links' }}">
+        <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/>
+          <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+        Link affiliate
+      </a>
+      <a href="/settings" class="{{ 'on' if page == 'settings' }}">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2
+                   V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8
+                   l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.8
+                   l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H7a1.7 1.7 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1
+                   a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V7
+                   a1.7 1.7 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"
+                transform="translate(0.6 0.6) scale(0.94)"/></svg>
+        Cài đặt
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main>{% block content %}{% endblock %}</main>
+
+<script>
+const root = document.documentElement;
+root.dataset.theme = localStorage.getItem('theme') || 'dark';
+document.getElementById('theme').onclick = () => {
+  root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('theme', root.dataset.theme);
+};
+</script>
+{% block script %}{% endblock %}
+
+</body>
+</html>

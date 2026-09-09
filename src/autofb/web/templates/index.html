@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}AutoFB — Bảng điều khiển{% endblock %}
+
+{% block kpi %}
+<form class="inline" method="post" action="/tick">
+  <button class="go" type="submit" title="Chạy ngay một lượt: dọn → crawl → dựng → đăng">
+    Chạy ngay
+  </button>
+</form>
+{% endblock %}
+
+{% block style %}
+  /* ---- khối trạng thái ---- */
+  .hero { display:flex; gap:26px; align-items:center; background:var(--surface);
+          border:1px solid var(--line-soft); border-radius:16px; padding:22px 24px;
+          margin-bottom:16px; box-shadow:var(--shadow); flex-wrap:wrap; }
+
+  /* Vòng tiến độ đọc nhanh hơn thanh ngang: liếc một cái là biết còn bao nhiêu. */
+  .ring { position:relative; width:108px; height:108px; flex:none; }
+  .ring svg { transform:rotate(-90deg); }
+  .ring .bgc { stroke:var(--raised); }
+  .ring .fgc { stroke:var(--ok); stroke-linecap:round;
+               transition:stroke-dasharray .6s cubic-bezier(.4,0,.2,1); }
+  .paused .ring .fgc { stroke:var(--warn); }
+  .ring .mid { position:absolute; inset:0; display:grid; place-content:center;
+               text-align:center; line-height:1.1; }
+  .ring .num { font-size:26px; font-weight:700; letter-spacing:-.03em; }
+  .ring .den { font-size:11.5px; color:var(--faint); margin-top:2px; }
+
+  .info { flex:1; min-width:230px; }
+  .state { display:flex; align-items:center; gap:9px; font-weight:600; font-size:16px;
+           margin-bottom:3px; }
+  .pulse { width:8px; height:8px; border-radius:50%; background:var(--ok); flex:none;
+           box-shadow:0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent);
+           animation:pulse 2.6s infinite; }
+  .paused .pulse { background:var(--warn); animation:none; }
+  @keyframes pulse { 70%{box-shadow:0 0 0 10px transparent} 100%{box-shadow:0 0 0 0 transparent} }
+  .why { font-size:13.5px; color:var(--muted); margin-bottom:14px; }
+  .facts { display:flex; gap:8px; flex-wrap:wrap; }
+  .fact { background:var(--raised); border-radius:9px; padding:7px 11px; font-size:12px;
+          color:var(--faint); line-height:1.35; }
+  .fact b { display:block; color:var(--text); font-size:13.5px; font-weight:600; }
+
+  /* ---- phân bố môn ---- */
+  .queue { display:flex; gap:7px; flex-wrap:wrap; margin-bottom:18px; }
+  .qchip { display:flex; align-items:center; gap:7px; background:var(--surface);
+           border:1px solid var(--line-soft); border-radius:10px; padding:7px 12px;
+           font-size:13px; color:var(--muted); }
+  .qchip i { width:7px; height:7px; border-radius:50%; background:var(--tone);
+             font-style:normal; }
+  .qchip b { color:var(--text); }
+
+  .tabs { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+  .tab { padding:7px 14px; border-radius:9px; text-decoration:none; font-size:13.5px;
+         font-weight:500; color:var(--muted); background:var(--surface);
+         border:1px solid var(--line-soft); transition:.15s; }
+  .tab:hover { color:var(--text); }
+  .tab.on { background:var(--accent-dim); color:var(--accent);
+            border-color:color-mix(in srgb, var(--accent) 40%, transparent); }
+
+  /* ---- danh sách bài ---- */
+  .item { display:flex; gap:13px; padding:13px 15px; border-bottom:1px solid var(--line-soft);
+          transition:.15s; }
+  .item:last-child { border-bottom:none; }
+  .item:hover { background:var(--raised); }
+  .thumb { width:80px; height:56px; border-radius:8px; object-fit:cover; flex:none;
+           background:var(--raised); border:1px solid var(--line-soft); }
+  /* Card đăng lên là khổ dọc 4:5 nên thumbnail cũng phải dọc, không thì méo. */
+  .thumb.card { width:72px; height:90px; }
+  .ph { display:grid; place-content:center; color:var(--faint); font-size:11px; }
+  .body { flex:1; min-width:0; }
+  .headline { font-size:14.5px; font-weight:500; line-height:1.42; margin-bottom:5px;
+              display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+              overflow:hidden; }
+  .sub { font-size:12px; color:var(--faint); display:flex; gap:9px; flex-wrap:wrap;
+         align-items:center; }
+  .sub a { color:var(--muted); text-decoration:none; }
+  .sub a:hover { color:var(--accent); }
+  /* Nút luôn hiện. Trước đây ẩn cho tới khi rê chuột — trên điện thoại không có
+     thao tác rê chuột, tức là không bấm được. */
+  .tools { display:flex; align-items:flex-start; gap:6px; flex:none; }
+  .flag { color:var(--warn); }
+
+  /* ---- sửa bài tại chỗ ---- */
+  .edit { margin-top:9px; }
+  .edit summary { display:inline-flex; align-items:center; gap:6px; font-size:12.5px;
+                  font-weight:500; color:var(--muted); cursor:pointer; list-style:none;
+                  padding:5px 11px; border-radius:8px; background:var(--bg);
+                  border:1px solid var(--line); user-select:none; }
+  .edit summary::before { content:"✎"; font-size:12px; }
+  .edit summary::-webkit-details-marker { display:none; }
+  .edit summary:hover { color:var(--text); }
+  .edit[open] summary { margin-bottom:10px; color:var(--text); }
+  .edit textarea { font-size:13.5px; line-height:1.6; resize:vertical; min-height:150px; }
+  .edit input { margin-top:8px; font-size:13px; }
+  .editfoot { display:flex; align-items:center; gap:11px; margin-top:9px; }
+
+  /* Điện thoại: hai ảnh + chữ + nút xếp ngang là chật. Cho nút xuống hàng dưới. */
+  @media (max-width:620px) {
+    .item { flex-wrap:wrap; }
+    .tools { width:100%; justify-content:flex-end; }
+    /* Vòng tiến độ to bằng nửa màn hình thì phải cuộn mới thấy bài — thu nhỏ và
+       xếp ngang với phần chữ thay vì chồng lên nhau. */
+    .hero { gap:16px; padding:16px; flex-wrap:nowrap; align-items:flex-start; }
+    .ring { width:72px; height:72px; }
+    .ring svg { width:72px; height:72px; }
+    .ring .num { font-size:19px; }
+    .ring .den { font-size:10px; }
+    .info { min-width:0; }
+  }
+{% endblock %}
+
+{% block content %}
+{% if fb and not fb.ok %}
+  <div class="card" style="border-color:var(--warn); padding:13px 16px; margin-bottom:14px;
+       color:var(--warn); font-size:13.5px; font-weight:500">{{ fb.text }}</div>
+{% endif %}
+
+{% set pct = progress if progress <= 100 else 100 %}
+<div class="hero {{ 'paused' if paused }}">
+  <div class="ring">
+    <svg width="108" height="108" viewBox="0 0 108 108">
+      <circle class="bgc" cx="54" cy="54" r="47" fill="none" stroke-width="9"/>
+      <circle class="fgc" cx="54" cy="54" r="47" fill="none" stroke-width="9"
+              stroke-dasharray="{{ (pct * 295 / 100)|round(1) }} 295"/>
+    </svg>
+    <div class="mid">
+      <div class="num">{{ plan.posted_today }}</div>
+      <div class="den">/ {{ plan.quota }} bài</div>
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="state">
+      <span class="pulse"></span>
+      {% if paused %}Đã tạm dừng{% else %}Đang chạy tự động{% endif %}
+    </div>
+    <div class="why">
+      {% if plan.should_publish %}Đến giờ đăng — lượt chạy tới sẽ đăng bài tiếp theo.
+      {% else %}{{ plan.reason|capitalize }}.{% endif %}
+    </div>
+    <div class="facts">
+      <div class="fact">Bây giờ<b>{{ now }}</b></div>
+      <div class="fact">Khung giờ<b>{{ schedule.start_hour }}h–{{ schedule.end_hour }}h</b></div>
+      <div class="fact">Giãn cách<b>{{ schedule.min_gap_minutes }} phút</b></div>
+      <div class="fact">Chờ đăng<b>{{ counts.approved or 0 }}</b></div>
+    </div>
+  </div>
+</div>
+
+{% if queue_by_sport %}
+  <div class="queue">
+    {% for row in queue_by_sport %}
+      <div class="qchip s-{{ row.sport }}"><i></i>{{ labels.get(row.sport, row.sport) }}
+        <b>{{ row.n }}</b></div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="tabs">
+  {% set tabs = [('queue','Chờ đăng',counts.approved), ('posted','Đã đăng',counts.posted),
+                 ('blocked','Bị chặn',counts.blocked)] %}
+  {% for key, name, n in tabs %}
+    <a class="tab {{ 'on' if tab == key }}" href="/?tab={{ key }}">{{ name }} ({{ n or 0 }})</a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  {% for post in posts %}
+    <div class="item s-{{ post.sport }}">
+      {# Card tiêu đề hiện trước vì trên feed nó cũng là ảnh đầu tiên người đọc thấy. #}
+      <a href="/posts/{{ post.id }}/card.png" target="_blank" rel="noopener"
+         title="Xem card cỡ thật">
+        <img class="thumb card" src="/posts/{{ post.id }}/card.png" alt="Card tiêu đề"
+             loading="lazy">
+      </a>
+      {% if post.image_url %}
+        <img class="thumb" src="{{ post.image_url }}" alt="" loading="lazy">
+      {% else %}<div class="thumb ph">không ảnh</div>{% endif %}
+
+      <div class="body">
+        <div class="headline">{{ post.content.split('\n')[0] }}</div>
+        <div class="sub">
+          <span class="chip">{{ labels.get(post.sport, post.sport) }}</span>
+          <span>{{ post.age }}</span>
+          {% if post.image_credit %}<span>{{ post.image_credit }}</span>{% endif %}
+          {% if post.fb_post_id %}
+            <a href="https://facebook.com/{{ post.fb_post_id }}" target="_blank"
+               rel="noopener">Xem trên Facebook ↗</a>
+          {% endif %}
+          {% if post.note %}<span class="flag">{{ post.note }}</span>{% endif %}
+        </div>
+
+        {% if post.status in ('approved', 'blocked') %}
+          {# Sửa ngay tại chỗ: card lấy chữ từ dòng đầu, thấy tiêu đề dở mà phải mở
+             màn hình khác mới sửa được thì sẽ không ai sửa. #}
+          <details class="edit">
+            <summary>Sửa nội dung</summary>
+            <form method="post" action="/posts/{{ post.id }}/update">
+              <textarea name="content" rows="8" spellcheck="false">{{ post.content }}</textarea>
+              <input type="url" name="affiliate_link" value="{{ post.affiliate_link or '' }}"
+                     placeholder="Link affiliate — đăng xuống comment, để trống cũng được">
+              <div class="editfoot">
+                <button class="primary small" type="submit">Lưu</button>
+                <span class="dim">Dòng đầu tiên là chữ in trên card.</span>
+              </div>
+            </form>
+          </details>
+        {% endif %}
+      </div>
+
+      <div class="tools">
+        {% if post.status == 'approved' %}
+          <form class="inline" method="post" action="/posts/{{ post.id }}/publish"
+                onsubmit="return confirm('Đăng bài này lên Fanpage ngay bây giờ?')">
+            <button class="small go" type="submit"
+                    title="Đăng ngay, không đợi tới giờ">Đăng ngay</button>
+          </form>
+        {% endif %}
+        {% if post.status in ('blocked', 'failed') %}
+          <form class="inline" method="post" action="/posts/{{ post.id }}/approve">
+            <button class="small primary" type="submit"
+                    title="Bỏ qua cảnh báo, đưa vào hàng chờ đăng">Duyệt</button>
+          </form>
+        {% endif %}
+        {% if post.status in ('approved', 'blocked', 'failed') %}
+          <form class="inline" method="post" action="/posts/{{ post.id }}/delete">
+            <button class="small danger" type="submit" title="Bỏ bài này, không đăng">Bỏ</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="empty">
+      {% if tab == 'queue' %}Hàng chờ trống — lượt chạy tới sẽ dựng thêm bài.
+      {% else %}Chưa có bài nào ở mục này.{% endif %}
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

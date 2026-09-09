@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}AutoFB — Cài đặt{% endblock %}
+
+{% block style %}
+  .lead { color:var(--muted); font-size:13.5px; margin:0 0 18px; }
+  .lead b { color:var(--text); }
+
+  /* Ô nhập số: nhãn trái, ô phải, giải thích ngay dưới. Xếp dọc để đọc một mạch
+     từ trên xuống, không phải nhảy mắt qua lại giữa hai cột. */
+  .row { display:flex; gap:16px; align-items:flex-start; padding:15px 18px;
+         border-bottom:1px solid var(--line-soft); }
+  .row:last-of-type { border-bottom:none; }
+  .row .name { flex:1; min-width:0; }
+  .row .name strong { display:block; font-size:14px; font-weight:600; }
+  .row .name span { font-size:12.5px; color:var(--faint); line-height:1.5; }
+  .row .set { display:flex; align-items:center; gap:9px; flex:none; }
+  .row input { width:88px; text-align:center; font-weight:600; font-variant-numeric:tabular-nums; }
+  .row .unit { font-size:13px; color:var(--muted); width:38px; }
+  /* Chấm nhỏ cạnh nhãn: cho biết thông số này đã bị sửa khác file cấu hình gốc. */
+  .edited { display:inline-block; width:6px; height:6px; border-radius:50%;
+            background:var(--amber); margin-left:7px; vertical-align:middle; }
+
+  .foot { display:flex; gap:10px; align-items:center; padding:16px 18px;
+          background:var(--raised); flex-wrap:wrap; }
+  .note { background:var(--accent-dim); color:var(--accent); border-radius:12px;
+          padding:13px 16px; font-size:13.5px; margin-bottom:16px; font-weight:500; }
+  .bad { background:color-mix(in srgb, var(--warn) 14%, transparent); color:var(--warn); }
+  .good { background:color-mix(in srgb, var(--ok) 14%, transparent); color:var(--ok); }
+{% endblock %}
+
+{% block content %}
+{% if error %}<div class="note bad">{{ error }}</div>{% endif %}
+{% if saved %}<div class="note good">Đã lưu — có hiệu lực từ lượt chạy tiếp theo.</div>{% endif %}
+
+<p class="lead">
+  Với thiết lập hiện tại, hệ thống đăng khoảng <b>một bài mỗi {{ gap_estimate }} phút</b>
+  trong khung giờ hoạt động. Sửa xong không cần khởi động lại — cả ba tiến trình đọc lại
+  ở lượt chạy sau.
+</p>
+
+<form method="post" action="/settings">
+  <div class="card">
+    {% for spec in specs %}
+      <div class="row">
+        <div class="name">
+          <strong>{{ spec.label }}{% if spec.key in overridden %}<i class="edited"
+             title="Đã sửa khác mặc định"></i>{% endif %}</strong>
+          <span>{{ spec.hint }}</span>
+        </div>
+        <div class="set">
+          <input type="number" name="{{ spec.key }}" value="{{ values[spec.key] }}"
+                 min="{{ spec.minimum }}" max="{{ spec.maximum }}" step="1" required>
+          <span class="unit">{{ spec.unit }}</span>
+        </div>
+      </div>
+    {% endfor %}
+
+    <div class="foot">
+      <button class="primary" type="submit">Lưu thay đổi</button>
+      <span class="dim">Giá trị mặc định lấy từ <code>config/sources.yaml</code>.</span>
+    </div>
+  </div>
+</form>
+
+<form method="post" action="/settings/reset"
+      onsubmit="return confirm('Bỏ hết thông số đã sửa, quay về mặc định?')">
+  <button class="danger" type="submit">Khôi phục mặc định</button>
+</form>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}AutoFB — Link affiliate{% endblock %}
+
+{% block kpi %}
+<div class="kpi">
+  <div>Link<b>{{ total }}</b></div>
+  <div>Đang bật<b>{{ active }}</b></div>
+</div>
+{% endblock %}
+
+{% block style %}
+  .add { background:var(--surface); border:1px solid var(--line-soft); border-radius:14px;
+         padding:20px 22px; margin-bottom:22px; box-shadow:var(--shadow); }
+  .add h2 { margin:0 0 4px; font-size:15px; }
+  .add .hint { color:var(--muted); font-size:13px; margin-bottom:8px; }
+  .row { display:grid; grid-template-columns:150px 1fr 180px auto; gap:10px;
+         align-items:end; }
+  @media (max-width:700px) { .row { grid-template-columns:1fr; } }
+  .group { margin-bottom:22px; }
+  .group-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .count { font-size:12px; color:var(--faint); }
+  .link { display:flex; align-items:center; gap:11px; padding:12px 15px;
+          border-bottom:1px solid var(--line-soft); flex-wrap:wrap; transition:.15s; }
+  .link:hover { background:var(--raised); }
+  .link:last-child { border-bottom:none; }
+  .link.off { opacity:.45; }
+  .url { flex:1; min-width:200px; word-break:break-all; font-size:13.5px; }
+  .url .label { display:block; font-size:12px; color:var(--muted); }
+  .url a { text-decoration:none; }
+  .used { font-size:12px; color:var(--faint); white-space:nowrap; }
+  .none { padding:11px 14px; color:var(--faint); font-size:13px; }
+{% endblock %}
+
+{% block content %}
+<div class="add">
+  <h2>Thêm link affiliate</h2>
+  <div class="hint">
+    Tự tạo link trên Shopee rồi dán vào đây. Bài thuộc môn nào sẽ tự lấy link của môn đó
+    và đăng ở comment đầu tiên. Nhiều link cùng môn thì hệ thống xoay vòng đều.
+  </div>
+  <form method="post" action="/links/add">
+    <div class="row">
+      <div>
+        <label>Môn</label>
+        <select name="sport">
+          {% for key, name in labels.items() %}
+            <option value="{{ key }}">{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Link Shopee</label>
+        <input type="url" name="url" required placeholder="https://shopee.vn/...">
+      </div>
+      <div>
+        <label>Ghi chú (tuỳ chọn)</label>
+        <input type="text" name="label" placeholder="Giày chạy Nike">
+      </div>
+      <button class="primary" type="submit">Thêm</button>
+    </div>
+  </form>
+</div>
+
+{% for sport, links in grouped.items() %}
+  <div class="group">
+    <div class="group-head s-{{ sport }}">
+      <span class="chip">{{ labels.get(sport, sport) }}</span>
+      <span class="count">
+        {{ links|length }} link{% if links %} · {{ links|selectattr('enabled')|list|length }} đang bật{% endif %}
+      </span>
+    </div>
+    <div class="card">
+      {% for link in links %}
+        <div class="link {{ '' if link.enabled else 'off' }}">
+          <div class="url">
+            <a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.url }}</a>
+            {% if link.label %}<span class="label">{{ link.label }}</span>{% endif %}
+          </div>
+          <span class="used">đã dùng {{ link.use_count }}×</span>
+          <form class="inline" method="post" action="/links/{{ link.id }}/toggle">
+            <button class="small" type="submit">{{ 'Tắt' if link.enabled else 'Bật' }}</button>
+          </form>
+          <form class="inline" method="post" action="/links/{{ link.id }}/delete"
+                onsubmit="return confirm('Xoá link này?')">
+            <button class="small danger" type="submit">Xoá</button>
+          </form>
+        </div>
+      {% else %}
+        <div class="none">Chưa có link — bài môn này sẽ đăng không kèm comment.</div>
+      {% endfor %}
+    </div>
+  </div>
+{% endfor %}
+{% endblock %}

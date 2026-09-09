@@ -1,0 +1,66 @@
+# Ba container chạy trên box, dùng chung một ảnh và một file SQLite.
+#
+#   web        — màn hình quản trị, ra internet qua Cloudflare Tunnel
+#   crawler    — kéo RSS + dựng bài, 1 tiếng một lượt
+#   publisher  — đăng bài lên Fanpage, 5 phút nhìn lịch một lần
+#
+# Vì sao tách: crawler treo vì một tờ báo chậm KHÔNG được làm publisher đăng trễ,
+# và token Facebook chết KHÔNG được làm dừng việc kéo tin. Ba cái khởi động lại
+# độc lập, chỉ gặp nhau qua bảng `post` trong SQLite (đã bật WAL + busy_timeout).
+
+x-autofb: &autofb
+  image: ghcr.io/truong6422/auto_fb:latest
+  restart: unless-stopped
+  env_file: [.env]
+  volumes:
+    # DB dùng chung. Bind mount chứ không phải named volume để `sqlite3` trên máy
+    # chủ mở xem được, và để biết chính xác dữ liệu nằm ở đâu khi cần sao lưu.
+    - ./data:/app/data
+    # sources.yaml sửa xong chỉ cần restart, không phải build lại ảnh.
+    - ./config/sources.yaml:/app/config/sources.yaml:ro
+  labels:
+    # Chỉ Watchtower mới tự cập nhật mấy container có nhãn này — adguard và shop3d
+    # trên cùng box phải để yên.
+    com.centurylinklabs.watchtower.enable: "true"
+  logging:
+    # Ổ USB ghi 2,9 MB/s: log không giới hạn là tự lấp đầy đĩa và làm treo box.
+    driver: json-file
+    options: {max-size: "5m", max-file: "3"}
+
+services:
+  web:
+    <<: *autofb
+    container_name: autofb-web
+    # Chỉ nghe trên localhost. Ra internet đi qua Cloudflare Tunnel, không mở cổng
+    # ra LAN — mạng nhà bị CGNAT nên mở cổng cũng vô nghĩa, mà lại hở với máy khác.
+    ports: ["127.0.0.1:3100:8080"]
+
+  crawler:
+    <<: *autofb
+    container_name: autofb-crawler
+    # Tỉnh dậy 10 phút một lần, nhưng chỉ thực sự kéo RSS khi tới nhịp đặt ở trang
+    # Cài đặt ("Kéo RSS mỗi ... giờ"). Nhờ vậy đổi nhịp trên web là có hiệu lực ngay,
+    # không phải sửa file này rồi khởi động lại container.
+    command: ["python", "cli.py", "crawl-loop", "--every", "10"]
+    healthcheck: {disable: true}
+
+  publisher:
+    <<: *autofb
+    container_name: autofb-publisher
+    command: ["python", "cli.py", "publish-loop", "--every", "5"]
+    healthcheck: {disable: true}
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: autofb-watchtower
+    restart: unless-stopped
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+    environment:
+      # 30 phút một lần là đủ: build trên GitHub Actions xong vài phút sau box tự lấy.
+      WATCHTOWER_POLL_INTERVAL: 1800
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"        # xoá ảnh cũ, đĩa 14GB không dư dả
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+    logging:
+      driver: json-file
+      options: {max-size: "2m", max-file: "2"}

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}AutoFB — Bài tự soạn{% endblock %}
+
+{% block style %}
+  .intro { color:var(--muted); font-size:13.5px; margin-bottom:16px; }
+  .form { background:var(--surface); border:1px solid var(--line-soft); border-radius:14px;
+          padding:20px 22px; margin-bottom:22px; box-shadow:var(--shadow); }
+  .form h2 { margin:0 0 4px; font-size:15px; }
+  textarea { width:100%; min-height:150px; border:1px solid var(--line); border-radius:8px;
+             padding:12px; font:inherit; background:var(--bg); color:var(--text);
+             resize:vertical; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .grid3 { display:grid; grid-template-columns:150px 1fr 200px; gap:12px; align-items:end; }
+  @media (max-width:700px) { .grid, .grid3 { grid-template-columns:1fr; } }
+  input[type=datetime-local] { width:100%; border:1px solid var(--line); border-radius:8px;
+             padding:9px 12px; font:inherit; background:var(--bg); color:var(--text);
+             color-scheme:dark; }
+  :root[data-theme="light"] input[type=datetime-local] { color-scheme:light; }
+  .submit { margin-top:14px; }
+
+  .item { display:flex; gap:13px; padding:13px 15px; border-bottom:1px solid var(--line-soft);
+          transition:.15s; }
+  .item:hover { background:var(--raised); }
+  .item:last-child { border-bottom:none; }
+  .item.done { opacity:.5; }
+  .thumb { width:80px; height:56px; border-radius:8px; object-fit:cover; flex:none;
+           background:var(--raised); border:1px solid var(--line-soft); }
+  .body { flex:1; min-width:0; }
+  .headline { font-size:14.5px; line-height:1.4; margin-bottom:4px;
+              display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+              overflow:hidden; }
+  .sub { font-size:12px; color:var(--faint); display:flex; gap:8px; flex-wrap:wrap;
+         align-items:center; }
+  .when { color:var(--accent); font-weight:600; }
+  .due { color:var(--ok); }
+  .link { color:var(--muted); word-break:break-all; }
+{% endblock %}
+
+{% block content %}
+<div class="intro">
+  Bài review, giới thiệu sản phẩm affiliate — bạn tự viết và chọn giờ đăng.
+  Đến giờ hẹn, hệ thống đăng bài này <b>trước</b> các bản tin tự động.
+  Bài ở đây không bị xoá khi dọn dữ liệu cũ.
+</div>
+
+<div class="form">
+  <h2>Soạn bài mới</h2>
+  <form method="post" action="/compose/add">
+    <label>Nội dung bài</label>
+    <textarea name="content" required
+              placeholder="Top 5 giày chạy bộ dưới 1 triệu đáng mua nhất 2026&#10;&#10;1. ..."></textarea>
+
+    <div class="grid3">
+      <div>
+        <label>Môn</label>
+        <select name="sport">
+          {% for key, name in labels.items() %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Link ảnh (tuỳ chọn)</label>
+        <input type="url" name="image_url" placeholder="https://...jpg">
+      </div>
+      <div>
+        <label>Giờ đăng</label>
+        <input type="datetime-local" name="scheduled_at" value="{{ default_when }}">
+      </div>
+    </div>
+
+    <label>Link affiliate — đăng ở comment đầu tiên</label>
+    <input type="url" name="affiliate_link" placeholder="https://shopee.vn/...">
+
+    <div class="submit"><button class="primary" type="submit">Lưu vào danh sách</button></div>
+  </form>
+</div>
+
+<div class="card">
+  {% for post in posts %}
+    <div class="item s-{{ post.sport }} {{ 'done' if post.status == 'posted' }}">
+      {% if post.image_url %}<img class="thumb" src="{{ post.image_url }}" alt="" loading="lazy">
+      {% else %}<div class="thumb"></div>{% endif %}
+      <div class="body">
+        <div class="headline">{{ post.content.split('\n')[0] }}</div>
+        <div class="sub">
+          <span class="chip">{{ labels.get(post.sport, post.sport) }}</span>
+          {% if post.status == 'posted' %}
+            <span>đã đăng</span>
+            <a href="https://facebook.com/{{ post.fb_post_id }}" target="_blank"
+               rel="noopener">Xem trên Facebook ↗</a>
+          {% else %}
+            <span class="when {{ 'due' if 'tới hạn' in post.when }}">{{ post.when }}</span>
+          {% endif %}
+          {% if post.affiliate_link %}<span class="link">{{ post.affiliate_link[:44] }}</span>{% endif %}
+        </div>
+      </div>
+      {% if post.status != 'posted' %}
+        <form class="inline" method="post" action="/posts/{{ post.id }}/delete"
+              onsubmit="return confirm('Xoá bài này?')">
+          <button class="small danger" type="submit">Xoá</button>
+        </form>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="empty">Chưa có bài tự soạn nào.</div>
+  {% endfor %}
+</div>
+{% endblock %}

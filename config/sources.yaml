@@ -1,0 +1,151 @@
+# Cấu hình nguồn RSS và link affiliate.
+# Sửa file này là đủ — không cần đụng code.
+#
+# sport: môn thể thao gán cho MỌI bài của feed đó.
+#        Dùng "mixed" cho feed tổng hợp -> hệ thống tự phân loại bằng bảng từ khoá.
+# lang:  vi | en. MVP chỉ đăng bài lang=vi (chưa có LLM dịch).
+
+crawl:
+  # Chỉ nhận bài mới hơn ngần này giờ. Chặn luôn các feed lẫn bài cũ (vd VnExpress cac-mon-khac).
+  max_age_hours: 24
+  # Số bài tối đa lấy từ mỗi feed một lần chạy. VietnamNet trả tới 1000 item.
+  max_items_per_feed: 120
+  request_timeout_seconds: 15
+  user_agent: "AutoFB/0.1 (+https://truonglb.cloud)"
+
+sources:
+  - name: VnExpress Thể thao
+    url: https://vnexpress.net/rss/the-thao.rss
+    sport: mixed
+    lang: vi
+    enabled: true
+
+  - name: Dân Trí Thể thao
+    url: https://dantri.com.vn/rss/the-thao.rss
+    sport: mixed
+    lang: vi
+    enabled: true
+
+  - name: Thanh Niên Thể thao
+    url: https://thanhnien.vn/rss/the-thao.rss
+    sport: mixed
+    lang: vi
+    enabled: true
+
+  - name: Thanh Niên Bóng đá VN
+    url: https://thanhnien.vn/rss/the-thao/bong-da-viet-nam.rss
+    sport: football
+    lang: vi
+    enabled: true
+
+  - name: VietnamNet Thể thao
+    url: https://vietnamnet.vn/rss/the-thao.rss
+    sport: mixed
+    lang: vi
+    enabled: true
+
+  - name: Tuổi Trẻ Thể thao
+    url: https://tuoitre.vn/rss/the-thao.rss
+    sport: mixed
+    lang: vi
+    enabled: true
+
+  - name: Thể thao & Văn hoá
+    url: https://thethaovanhoa.vn/rss/the-thao.rss
+    sport: mixed
+    lang: vi
+    enabled: true
+
+  - name: VnExpress Các môn khác
+    url: https://vnexpress.net/rss/cac-mon-khac.rss
+    sport: mixed
+    lang: vi
+    # Feed này lẫn bài từ 2019 — bộ lọc max_age_hours sẽ loại. Bật vì vẫn có tin mới.
+    enabled: true
+
+# Link affiliate theo môn. Bài môn nào -> gắn link môn đó vào comment.
+# Nhiều link trong một môn -> xoay vòng theo lượt đăng.
+# Môn không có link -> đăng bài không kèm comment (không phải lỗi).
+affiliate_links:
+  football: []
+  running: []
+  badminton: []
+  pickleball: []
+  basketball: []
+  tennis: []
+  cycling: []
+  gym: []
+  other: []
+
+# Khuôn dựng bài (M4). Chưa dùng LLM — bài ghép từ dữ liệu RSS theo mẫu dưới đây.
+# Đã bỏ CTA ("Bạn nghĩ sao?...") — câu mời tương tác lặp lại ở mọi bài trông rất máy móc.
+post:
+  max_summary_words: 55      # giới hạn phần trích, không lấy toàn văn của nguồn
+  daily_quota: 10            # số bài đăng mỗi ngày, rải đều trong khung giờ hoạt động
+  per_sport_quota: 6         # tối đa mỗi môn, để bóng đá không nuốt hết suất
+  default:
+    hashtags: ["thethao", "tintuc"]
+  by_sport:
+    football:
+      hashtags: ["bongda", "thethao", "vleague"]
+    basketball:
+      hashtags: ["bongro", "nba", "thethao"]
+    tennis:
+      hashtags: ["tennis", "thethao"]
+    pickleball:
+      hashtags: ["pickleball", "thethao"]
+    badminton:
+      hashtags: ["caulong", "badminton", "thethao"]
+    running:
+      hashtags: ["chaybo", "running", "thethao"]
+    cycling:
+      hashtags: ["xedap", "cycling", "thethao"]
+    gym:
+      hashtags: ["gym", "fitness", "thethao"]
+
+# Lịch đăng tự động. Không có bước duyệt tay — bài dựng xong là vào hàng chờ đăng.
+schedule:
+  active_hours: [7, 22]      # chỉ đăng trong khung giờ này
+  min_gap_minutes: 45        # cách nhau tối thiểu, tránh đăng dồn bất thường
+  crawl_every_hours: 1       # bao lâu kéo RSS một lần
+
+# Ảnh "card tiêu đề" đăng kèm mỗi bài: nền gradient + tiêu đề chữ to.
+# Mục đích: người lướt feed đọc được nội dung ngay, không phải bấm vào mới thấy.
+# Bài sẽ có 2 ảnh — card này trước, ảnh gốc của báo sau.
+card:
+  enabled: true
+  width: 1080
+  height: 1350               # tỉ lệ 4:5, khổ dọc cao nhất Facebook không cắt
+  max_lines: 7               # tiêu đề dài hơn thì tự thu nhỏ chữ, quá nữa thì cắt bằng "…"
+  max_font_size: 118
+  min_font_size: 44
+  text_color: "#FFFFFF"
+  brand: "Sport Hub Việt Nam"   # dòng nhỏ góc trên. Để "" nếu không muốn hiện.
+  # Xoay vòng theo id bài, không ngẫu nhiên — hai bài liền nhau chắc chắn khác màu.
+  # Chỉ dùng màu đậm: chữ trắng trên nền nhạt là không đọc được.
+  gradients:
+    - ["#E8365D", "#B0175F"]
+    - ["#1E3C72", "#2A5298"]
+    - ["#134E5E", "#12805C"]
+    - ["#42275A", "#734B6D"]
+    - ["#C31432", "#240B36"]
+    - ["#0F2027", "#2C5364"]
+    - ["#F12711", "#C6410A"]
+    - ["#141E30", "#243B55"]
+
+# Dung lượng: mini server ổ nhỏ, xoá dữ liệu cũ hơn ngần này ngày.
+# MVP chỉ cần đăng bài, không cần giữ lịch sử.
+retention_days: 3
+
+# Từ khoá chặn — thay cho việc duyệt tay. Bài chứa các từ này KHÔNG đăng.
+blocked_keywords:
+  - qua doi
+  - tu vong
+  - tang le
+  - doping
+  - bat giu
+  - khoi to
+  - hiep dam
+  - bao hanh
+  - tu nan
+  - tai nan nghiem trong

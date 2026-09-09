@@ -1,0 +1,13 @@
+# Giữ ngữ cảnh build nhỏ: mỗi MB thừa là thêm thời gian đẩy lên GitHub Actions.
+.venv/
+data/
+.env
+.git/
+.github/
+.idea/
+.pytest_cache/
+__pycache__/
+*.pyc
+tests/
+plans/
+docs/
