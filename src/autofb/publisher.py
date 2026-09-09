@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 from .card_renderer import FontMissingError, render_card, title_of
 from .config import CardSettings, load_config
-from .facebook import FacebookClient, PermanentError, TransientError
+from .facebook import AuthError, FacebookClient, PermanentError, TransientError
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,12 @@ class PublishReport:
     commented: int = 0
     failed: int = 0
     errors: list[str] = field(default_factory=list)
+    # Khác None nghĩa là lượt bị dừng vì token/quyền, KHÔNG phải vì bài hỏng.
+    auth_broken: str | None = None
 
     def summary(self) -> str:
-        return f"đăng {self.posted} bài | {self.commented} comment | lỗi {self.failed}"
+        base = f"đăng {self.posted} bài | {self.commented} comment | lỗi {self.failed}"
+        return base + (f" | DỪNG: {self.auth_broken}" if self.auth_broken else "")
 
 
 def _with_retry(action, what: str):
@@ -122,6 +125,8 @@ def build_media(
         except (ValueError, FontMissingError, OSError) as exc:
             report.errors.append(f"#{post['id']} card: {exc}")
             logger.error("Bài #%s không vẽ được card: %s", post["id"], exc)
+        except AuthError:
+            raise
         except (TransientError, PermanentError) as exc:
             report.errors.append(f"#{post['id']} upload card: {exc}")
             logger.error("Bài #%s upload card lỗi: %s", post["id"], exc)
@@ -132,6 +137,8 @@ def build_media(
             photo_ids.append(
                 _with_retry(lambda: client.upload_unpublished_photo_url(image_url), "Upload ảnh")
             )
+        except AuthError:
+            raise
         except (TransientError, PermanentError) as exc:
             # Link ảnh của báo chết là chuyện thường. Bài vẫn lên với card tiêu đề.
             logger.warning("Bài #%s bỏ ảnh nguồn (%s): %s", post["id"], image_url, exc)
@@ -160,6 +167,13 @@ def publish_one(
 
     try:
         fb_post_id = _with_retry(send, "Đăng bài")
+    except AuthError as exc:
+        # Token/quyền hỏng: bài này không có lỗi gì, giữ nguyên 'approved' để đăng lại
+        # sau khi cấp token mới. Ném tiếp để publish_approved dừng cả lượt.
+        conn.execute("UPDATE post SET note = ? WHERE id = ?",
+                     (f"Chưa đăng được — {exc}", post["id"]))
+        report.errors.append(f"#{post['id']} bài: {exc}")
+        raise
     except (TransientError, PermanentError) as exc:
         conn.execute(
             "UPDATE post SET status = 'failed', note = ? WHERE id = ?",
@@ -212,7 +226,15 @@ def publish_approved(
         ).fetchall())
 
     for post in rows:
-        publish_one(client, conn, post, report, card)
+        try:
+            publish_one(client, conn, post, report, card)
+        except AuthError as exc:
+            # Mọi bài còn lại cũng sẽ hỏng y hệt. Dừng ở đây, hàng chờ giữ nguyên
+            # cho tới khi người dùng cấp token mới.
+            conn.commit()
+            report.auth_broken = str(exc)
+            logger.error("Dừng lượt đăng — token/quyền hỏng: %s", exc)
+            return report
         conn.commit()
 
     return report

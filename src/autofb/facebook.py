@@ -22,6 +22,12 @@ UPLOAD_TIMEOUT = 90
 # Mã lỗi Graph API nên thử lại. Ngoài danh sách này thì coi là lỗi vĩnh viễn.
 _TRANSIENT_CODES = {1, 2, 4, 17, 32, 341, 613}
 
+# Lỗi thuộc về TOKEN/QUYỀN, không thuộc về nội dung bài:
+#   190 token hết hạn hoặc bị thu hồi   102 phiên không hợp lệ
+#   10 / 200–299 thiếu quyền            2500 OAuth sai
+#   458–467 người dùng phải đăng nhập lại
+_AUTH_CODES = {10, 102, 190, 2500, 458, 459, 460, 463, 464, 467}
+
 
 class TransientError(Exception):
     """Lỗi tạm thời — nên thử lại sau."""
@@ -29,6 +35,15 @@ class TransientError(Exception):
 
 class PermanentError(Exception):
     """Lỗi không tự khỏi — dừng và báo người, đừng thử lại."""
+
+
+class AuthError(PermanentError):
+    """Token hỏng / thiếu quyền — hỏng ở TÀI KHOẢN, không phải ở bài đang đăng.
+
+    Phải tách khỏi PermanentError vì cách xử lý ngược nhau: bài sai nội dung thì đánh
+    dấu bài đó hỏng rồi đăng bài kế tiếp; token hỏng thì mọi bài đều sẽ hỏng như nhau,
+    đánh dấu tiếp là xoá sạch hàng chờ trong một tiếng dù bài chẳng có lỗi gì.
+    """
 
 
 @dataclass(frozen=True)
@@ -87,6 +102,9 @@ class FacebookClient:
 
         if code in _TRANSIENT_CODES or status_code >= 500:
             return TransientError(f"[{code}] {message}")
+        # Dải 200–299 là nhóm lỗi quyền của Graph API, không liệt kê hết từng mã được.
+        if code in _AUTH_CODES or (isinstance(code, int) and 200 <= code <= 299):
+            return AuthError(f"[{code}] {message}")
         return PermanentError(f"[{code}] {message}")
 
     # ---------- thao tác ----------

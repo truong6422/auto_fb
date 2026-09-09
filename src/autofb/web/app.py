@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from .. import db
 from ..card_renderer import FontMissingError, render_card, title_of
 from ..config import load_config
-from ..facebook import FacebookClient, PermanentError, TransientError
+from ..facebook import AuthError, FacebookClient, PermanentError, TransientError
 from ..autopilot import run_tick
 from ..post_pipeline import build_pending_posts
 from ..runtime_settings import (
@@ -285,7 +285,13 @@ def publish_post_now(post_id: int):
         if row:
             from ..publisher import PublishReport, publish_one
 
-            publish_one(client, conn, row, PublishReport(), load_config().card)
+            try:
+                publish_one(client, conn, row, PublishReport(), load_config().card)
+            except AuthError:
+                # Token hỏng: publish_one đã ghi lý do vào post.note và giữ nguyên
+                # trạng thái 'approved'. Đưa người dùng về hàng chờ để thấy ghi chú đó.
+                conn.commit()
+                return RedirectResponse("/?tab=queue", status_code=303)
             conn.commit()
     return RedirectResponse("/?tab=posted", status_code=303)
 

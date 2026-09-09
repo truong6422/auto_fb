@@ -9,7 +9,7 @@ import pytest  # noqa: E402
 
 from autofb import db, publisher  # noqa: E402
 from autofb.config import CardSettings  # noqa: E402
-from autofb.facebook import PermanentError, TransientError  # noqa: E402
+from autofb.facebook import AuthError, PermanentError, TransientError  # noqa: E402
 
 NOW = "2026-09-07T10:00:00+00:00"
 
@@ -240,3 +240,39 @@ class TestCardTieuDe:
 
         assert client.uploaded_bytes == []
         assert client.attached == ["photo_u1"]
+
+
+class TestTokenHong:
+    """Token hết hạn là hỏng ở TÀI KHOẢN, không phải ở bài — không được ăn hàng chờ."""
+
+    def test_khong_danh_dau_bai_hong_khi_token_het_han(self, conn):
+        post_id = make_post(conn)
+        client = FakeClient(post_error=AuthError("[190] token hết hạn"))
+        report = publisher.publish_approved(client, conn, card=NO_CARD)
+
+        row = fetch(conn, post_id)
+        assert row["status"] == "approved"        # vẫn nằm trong hàng chờ
+        assert "190" in row["note"]
+        assert report.failed == 0
+        assert report.auth_broken is not None
+
+    def test_dung_ca_luot_thay_vi_thu_tung_bai(self, conn):
+        """Bài nào cũng sẽ hỏng như nhau — thử tiếp chỉ tổ xoá sạch hàng chờ."""
+        for _ in range(3):
+            make_post(conn)
+        client = FakeClient(post_error=AuthError("[190] token hết hạn"))
+        publisher.publish_approved(client, conn, limit=3, card=NO_CARD)
+
+        assert client.post_calls == 1             # chỉ thử đúng một lần
+        assert conn.execute(
+            "SELECT COUNT(*) FROM post WHERE status = 'approved'"
+        ).fetchone()[0] == 3
+
+    def test_loi_noi_dung_van_danh_dau_bai_hong_nhu_cu(self, conn):
+        """Phân biệt hai loại lỗi: bài sai nội dung thì vẫn phải loại ra."""
+        post_id = make_post(conn)
+        client = FakeClient(post_error=PermanentError("[1500] link không hợp lệ"))
+        report = publisher.publish_approved(client, conn, card=NO_CARD)
+
+        assert fetch(conn, post_id)["status"] == "failed"
+        assert report.failed == 1 and report.auth_broken is None
