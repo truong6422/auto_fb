@@ -15,14 +15,39 @@ from .config import PROJECT_ROOT
 
 ENV_PATH = PROJECT_ROOT / ".env"
 
+# Đường dẫn đã cảnh báo là đọc hỏng — để không lặp log ở mỗi request.
+_READ_FAILURES: set[Path] = set()
+
 
 def read_env_file(path: Path | None = None) -> dict[str, str]:
-    """Đọc .env thành dict. Không đụng os.environ."""
+    """Đọc .env thành dict. Không đụng os.environ.
+
+    KHÔNG BAO GIỜ ném lỗi. File .env được gắn vào container, và nếu quyền trên máy chủ
+    sai (chủ file là root, container chạy bằng uid 10001) thì đọc sẽ báo PermissionError.
+    Để lỗi đó thoát ra là cả web sập ngay lúc import — trang trả 502 chỉ vì một cái
+    chmod, trong khi biến môi trường vẫn có đủ thông tin để chạy tiếp.
+
+    Đọc hỏng -> trả dict rỗng và ghi cảnh báo; current_value() rơi về os.environ.
+    """
     path = path or ENV_PATH
-    if not path.exists():
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
         return {}
+    except OSError as exc:
+        # Chỉ cảnh báo MỘT LẦN cho mỗi đường dẫn: hàm này gọi ở mỗi request và mỗi
+        # lượt chạy, log lặp lại sẽ lấp đầy ổ USB của box.
+        if path not in _READ_FAILURES:
+            _READ_FAILURES.add(path)
+            logging.getLogger(__name__).error(
+                "Không đọc được %s (%s) — dùng biến môi trường thay thế. "
+                "Trong Docker, sửa bằng: chown 10001:10001 .env && chmod 640 .env",
+                path, exc,
+            )
+        return {}
+
     values: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in content.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue

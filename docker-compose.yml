@@ -21,6 +21,11 @@ x-autofb: &autofb
     # .env gắn vào chứ không chỉ dựa vào env_file: Docker nạp env_file MỘT LẦN lúc
     # tạo container, nên đổi token mà chỉ tạo lại một dịch vụ là hai dịch vụ kia vẫn
     # ôm token cũ. Có file này thì cả ba đọc lại ở lượt sau, không phải tạo lại gì.
+    #
+    # QUYỀN: container chạy bằng uid 10001, nên trên máy chủ phải
+    #     chown 10001:10001 .env && chmod 640 .env
+    # Để root:root 600 thì container không đọc được file (app vẫn chạy bằng biến
+    # môi trường nhưng mất khả năng đổi token nóng).
     - ./.env:/app/.env:ro
   labels:
     # Chỉ Watchtower mới tự cập nhật mấy container có nhãn này — adguard và shop3d

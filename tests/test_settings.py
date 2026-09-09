@@ -64,3 +64,44 @@ class TestCheToken:
 
     def test_thieu_token_thi_coi_nhu_chua_cau_hinh(self):
         assert not settings.FacebookSettings(page_id="1", access_token="").configured
+
+
+class TestFileKhongDocDuoc:
+    """File .env không đọc được KHÔNG được làm sập app.
+
+    Chuyện đã xảy ra thật: .env trên máy chủ là 600 root:root, container chạy bằng
+    uid 10001 nên PermissionError thoát ra lúc import -> web sập, subdomain trả 502.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _quen_canh_bao_cu(self):
+        settings._READ_FAILURES.clear()
+
+    def test_khong_ném_lỗi_khi_thiếu_quyền(self, env_file, monkeypatch):
+        env_file.write_text("FB_PAGE_ID=123\n")
+        monkeypatch.setattr(
+            settings.Path, "read_text",
+            lambda self, **kw: (_ for _ in ()).throw(PermissionError(13, "Permission denied")),
+        )
+        assert settings.read_env_file() == {}
+
+    def test_roi_ve_bien_moi_truong_khi_khong_doc_duoc(self, env_file, monkeypatch):
+        env_file.write_text("FB_PAGE_ACCESS_TOKEN=trong_file\n")
+        monkeypatch.setenv("FB_PAGE_ACCESS_TOKEN", "tu_bien_moi_truong")
+        monkeypatch.setattr(
+            settings.Path, "read_text",
+            lambda self, **kw: (_ for _ in ()).throw(PermissionError(13, "Permission denied")),
+        )
+        assert settings.current_value("FB_PAGE_ACCESS_TOKEN") == "tu_bien_moi_truong"
+
+    def test_chi_ghi_canh_bao_mot_lan(self, env_file, monkeypatch, caplog):
+        """Hàm này chạy ở mỗi request; log lặp lại sẽ lấp đầy ổ USB của box."""
+        env_file.write_text("x=1\n")
+        monkeypatch.setattr(
+            settings.Path, "read_text",
+            lambda self, **kw: (_ for _ in ()).throw(PermissionError(13, "Permission denied")),
+        )
+        with caplog.at_level("ERROR"):
+            for _ in range(5):
+                settings.read_env_file()
+        assert sum("Không đọc được" in r.message for r in caplog.records) == 1

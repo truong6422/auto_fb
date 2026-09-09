@@ -35,6 +35,15 @@ mkdir -p /opt/autofb && cd /opt/autofb
 docker compose up -d
 ```
 
+`.env` phải để container đọc được — nó chạy bằng uid 10001, không phải root:
+
+```bash
+chown 10001:10001 /opt/autofb/.env && chmod 640 /opt/autofb/.env
+```
+
+Để `600 root:root` thì container không đọc được file. App vẫn chạy (rơi về biến môi
+trường từ `env_file`) nhưng mất khả năng đổi token nóng.
+
 `.env` phải có:
 
 ```
