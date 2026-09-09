@@ -19,11 +19,15 @@ logger = logging.getLogger(__name__)
 
 CACHE_SECONDS = 60
 
+# Số bài kéo về mỗi lần. Đủ để lướt lại vài ngày gần nhất — muốn xem xa hơn thì mở
+# thẳng Fanpage, ở đó cuộn thoải mái hơn màn hình này.
+LIMIT = 25
+
 # (thời điểm hết hạn, danh sách bài). Chỉ có một Fanpage nên một ô nhớ là đủ.
 _cache: tuple[float, list[PagePost]] = (0.0, [])
 
 
-def recent_posts(limit: int = 25) -> tuple[list[PagePost], str]:
+def recent_posts(limit: int = LIMIT) -> tuple[list[PagePost], str]:
     """Trả về (danh sách bài, lời báo lỗi). Lỗi rỗng nghĩa là lấy được.
 
     Không ném lỗi ra ngoài: Facebook hỏng thì màn hình quản trị vẫn phải mở được để

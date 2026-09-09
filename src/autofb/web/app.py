@@ -25,7 +25,9 @@ from ..scheduler import VN_TIMEZONE, decide, now_vn, posted_today
 from ..publisher import publish_approved
 from ..settings import load_env, load_facebook_settings, silence_token_leak
 from .auth import BasicAuthMiddleware
-from .fanpage_feed import forget as forget_feed, recent_posts as fanpage_posts
+from .fanpage_feed import (
+    LIMIT as feed_limit, forget as forget_feed, recent_posts as fanpage_posts,
+)
 from .state import SystemState
 
 # Nạp .env NGAY khi import: middleware xác thực đọc AUTOFB_PASSWORD từ os.environ,
@@ -179,11 +181,21 @@ def index(request: Request, tab: str = "queue"):
     # Mục "Đã đăng" lấy từ Fanpage: ở đó có số tương tác thật, còn DB chỉ giữ phần
     # sổ sách. Facebook không trả lời được thì rơi về danh sách trong DB — vẫn hơn
     # là hiện một trang trống.
-    feed, feed_error = _fanpage_items() if tab == "posted" else ([], "")
+    #
+    # Gọi ở MỌI tab chứ không riêng tab "Đã đăng": con số trên nhãn tab phải khớp với
+    # danh sách mở ra, mà DB đếm khác Fanpage (Fanpage còn có bài đổi ảnh đại diện,
+    # ảnh bìa — AutoFB không đăng nhưng vẫn nằm trên Page). Có nhớ tạm 60 giây nên
+    # chi phí là nhiều nhất một lần gọi mỗi phút.
+    feed, feed_error = _fanpage_items()
 
     with db.session() as conn:
         config = effective_config(conn)
         plan = decide(config, conn)
+        counts = _counts(conn)
+        if not feed_error:
+            # Kéo được đủ LIMIT bài nghĩa là Fanpage còn nữa ở phía sau — ghi "25+"
+            # chứ không ghi "25", đó là con số sàn chứ không phải tổng số bài.
+            counts["posted"] = f"{len(feed)}+" if len(feed) >= feed_limit else len(feed)
         sports = conn.execute(
             "SELECT sport, COUNT(*) n FROM post WHERE status='approved' GROUP BY sport"
             " ORDER BY n DESC"
@@ -195,7 +207,7 @@ def index(request: Request, tab: str = "queue"):
                 "posts": _posts(conn, statuses),
                 "feed": feed,
                 "feed_error": feed_error,
-                "counts": _counts(conn),
+                "counts": counts,
                 "tab": tab,
                 "labels": SPORT_LABELS,
                 "paused": state.paused,
