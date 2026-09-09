@@ -2,6 +2,11 @@
 data/
 __pycache__/
 *.pyc
-.env
 .pytest_cache/
 .idea/
+
+# Bí mật. Chặn cả các bản sao lưu kiểu .env.bak-260909 — chúng chứa token cũ
+# và rất dễ lọt vào `git add -A` vì tên không khớp mẫu ".env".
+.env
+.env.*
+!.env.example
