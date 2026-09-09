@@ -125,6 +125,11 @@ def _counts(conn) -> dict[str, int]:
     counts = {row["status"]: row["n"] for row in rows}
     counts["articles"] = conn.execute("SELECT COUNT(*) FROM raw_article").fetchone()[0]
     counts["clusters"] = conn.execute("SELECT COUNT(*) FROM topic_cluster").fetchone()[0]
+    # Hiện thành badge cạnh mục "Link affiliate" trên menu — 0 link nghĩa là mọi bài
+    # đăng ra đều không có comment gắn link, đó là thứ cần thấy ngay chứ không phải
+    # mở trang mới biết.
+    counts["links_active"] = conn.execute(
+        "SELECT COUNT(*) FROM affiliate_link WHERE enabled = 1").fetchone()[0]
     return counts
 
 

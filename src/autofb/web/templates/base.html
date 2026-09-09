@@ -88,10 +88,12 @@
   .acts { margin-top:auto; padding-top:14px; border-top:1px solid var(--line-soft);
           display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
   /* "Chạy ngay" chiếm trọn một hàng, hàng dưới là đổi nền + Dừng. Nhồi cả ba vào
-     một hàng rộng 214px thì chữ bị xuống dòng giữa nút. */
-  .acts .kpi { flex-basis:100%; }
-  .acts .kpi:empty { display:none; }
-  .acts .kpi form, .acts .kpi button { width:100%; }
+     một hàng rộng 214px thì chữ bị xuống dòng giữa nút.
+     Tên lớp là act-main chứ không phải kpi: links.html cũng có <div class="kpi">
+     riêng của nó, trùng tên thì trang đó ăn nhầm luật của sidebar. */
+  .acts .act-main { flex-basis:100%; }
+  .acts .act-main:empty { display:none; }
+  .acts .act-main form, .acts .act-main button { width:100%; }
   .acts > form { flex:1; }
   .acts > form button { width:100%; }
 
@@ -129,7 +131,7 @@
     .side { display:grid; grid-template-columns:1fr auto; align-items:center; }
     .acts { margin-top:0; padding-top:0; border-top:none; padding-bottom:10px;
             flex-wrap:nowrap; }
-    .acts .kpi { flex-basis:auto; }
+    .acts .act-main { flex-basis:auto; }
     .acts > form { flex:none; }
     .shell { margin-left:0; }
   }
@@ -150,6 +152,27 @@
           color:var(--muted); display:inline-flex; align-items:center; }
   .icon:hover { color:var(--text); background:var(--raised); }
   .small { font-size:13px; padding:6px 12px; border-radius:8px; }
+
+  /* ============ chạm bằng ngón tay ============
+     Đo trên màn 390px: các nút đang cao 32–35px. Ngón tay người lớn phủ khoảng
+     45px nên ở cỡ đó rất hay bấm nhầm sang nút bên cạnh — mà hai nút cạnh nhau
+     ở đây là "Đăng ngay" và "Bỏ", bấm nhầm là đăng nhầm bài lên Fanpage.
+     44px là ngưỡng tối thiểu của cả Apple lẫn Google.
+
+     Chỉ áp dụng cho thiết bị cảm ứng: chuột trỏ chính xác hơn ngón tay nhiều,
+     ép nút to trên máy tính chỉ làm giao diện thô. */
+  @media (pointer:coarse) {
+    button, .btn { min-height:44px; padding:10px 16px; }
+    .small { min-height:44px; padding:8px 14px; }
+    .icon { min-width:44px; justify-content:center; }
+    summary { min-height:44px; }
+    .edit summary { padding:11px 14px; }
+    .nav a { min-height:44px; }
+    /* Ô nhập cũng vậy — gõ hụt ô là phải bấm lại. */
+    input, select, textarea { min-height:44px; }
+    /* Hai nút nguy hiểm cạnh nhau thì phải có khe rõ ràng. */
+    .tools { gap:10px; }
+  }
 
   /* Giới hạn bề ngang dòng đọc. Không để nội dung giãn hết màn hình 27 inch —
      tiêu đề bài dài cả gang tay thì mắt phải quét ngang rất mệt. */
@@ -214,6 +237,7 @@
         <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/>
           <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
         Link affiliate
+        {% if counts and counts.links_active %}<span class="n">{{ counts.links_active }}</span>{% endif %}
       </a>
       <a href="/settings" class="{{ 'on' if page == 'settings' }}">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/>
@@ -229,7 +253,7 @@
   </nav>
 
   <div class="acts">
-    <div class="kpi">{% block kpi %}{% endblock %}</div>
+    <div class="act-main">{% block kpi %}{% endblock %}</div>
     <button class="icon" id="theme" title="Đổi nền sáng/tối" aria-label="Đổi nền sáng tối">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
            stroke-width="1.9" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3

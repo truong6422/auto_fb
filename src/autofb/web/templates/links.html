@@ -1,13 +1,6 @@
 {% extends "base.html" %}
 {% block title %}AutoFB — Link affiliate{% endblock %}
 
-{% block kpi %}
-<div class="kpi">
-  <div>Link<b>{{ total }}</b></div>
-  <div>Đang bật<b>{{ active }}</b></div>
-</div>
-{% endblock %}
-
 {% block style %}
   .add { background:var(--surface); border:1px solid var(--line-soft); border-radius:14px;
          padding:20px 22px; margin-bottom:22px; box-shadow:var(--shadow); }
@@ -61,7 +54,7 @@
   </form>
 </div>
 
-{% for sport, links in grouped.items() %}
+{% for sport, links in grouped.items() if links %}
   <div class="group">
     <div class="group-head s-{{ sport }}">
       <span class="chip">{{ labels.get(sport, sport) }}</span>
@@ -88,6 +81,15 @@
       {% else %}
         <div class="none">Chưa có link — bài môn này sẽ đăng không kèm comment.</div>
       {% endfor %}
+    </div>
+  </div>
+{% else %}
+  {# Vòng lặp lọc bỏ môn chưa có link, nên khi chưa thêm gì thì không nhóm nào hiện.
+     Không có dòng này là trang trắng trơn, người dùng tưởng hỏng. #}
+  <div class="card">
+    <div class="empty">
+      Chưa có link affiliate nào.<br>
+      <b>Bài đăng vẫn chạy bình thường</b>, chỉ là không kèm comment gắn link.
     </div>
   </div>
 {% endfor %}

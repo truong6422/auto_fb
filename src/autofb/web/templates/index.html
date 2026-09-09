@@ -59,8 +59,11 @@
             border-color:color-mix(in srgb, var(--accent) 40%, transparent); }
 
   /* ---- danh sách bài ---- */
-  .item { display:flex; gap:13px; padding:13px 15px; border-bottom:1px solid var(--line-soft);
-          transition:.15s; }
+  /* flex-wrap để khối "Sửa nội dung" xuống hẳn dòng dưới, chiếm trọn bề ngang.
+     Trước đây nó nằm trong cột chữ, trên điện thoại cột đó chỉ rộng ~190px nên
+     ô soạn thảo bị bóp còn một sợi. */
+  .item { display:flex; flex-wrap:wrap; gap:13px; padding:13px 15px;
+          border-bottom:1px solid var(--line-soft); transition:.15s; }
   .item:last-child { border-bottom:none; }
   .item:hover { background:var(--raised); }
   .thumb { width:80px; height:56px; border-radius:8px; object-fit:cover; flex:none;
@@ -78,11 +81,13 @@
   .sub a:hover { color:var(--accent); }
   /* Nút luôn hiện. Trước đây ẩn cho tới khi rê chuột — trên điện thoại không có
      thao tác rê chuột, tức là không bấm được. */
-  .tools { display:flex; align-items:flex-start; gap:6px; flex:none; }
+  /* order: nút hành động bám sát tiêu đề ở dòng trên, ô sửa bài rơi xuống dòng dưới.
+     Để nguyên thứ tự DOM thì ô sửa chen vào giữa, đẩy nút xuống tận đáy. */
+  .tools { display:flex; align-items:flex-start; gap:6px; flex:none; order:1; }
+  .edit { order:2; flex-basis:100%; }
   .flag { color:var(--warn); }
 
   /* ---- sửa bài tại chỗ ---- */
-  .edit { margin-top:9px; }
   .edit summary { display:inline-flex; align-items:center; gap:6px; font-size:12.5px;
                   font-weight:500; color:var(--muted); cursor:pointer; list-style:none;
                   padding:5px 11px; border-radius:8px; background:var(--bg);
@@ -99,6 +104,14 @@
   @media (max-width:620px) {
     .item { flex-wrap:wrap; }
     .tools { width:100%; justify-content:flex-end; }
+    /* Điện thoại: hai ảnh ở dòng trên, chữ xuống dòng riêng chiếm trọn 360px.
+       Xếp ngang như trên máy tính thì tiêu đề chỉ còn 186px — cụt ngay dòng thứ hai
+       và không đọc được bài nói gì. Đổi lại mỗi mục cao thêm chút, chấp nhận được
+       vì đây là danh sách để lướt. */
+    .body { flex-basis:100%; }
+    .thumb { width:72px; height:50px; }
+    .thumb.card { width:64px; height:80px; }
+    .headline { -webkit-line-clamp:3; font-size:15px; }
     /* Vòng tiến độ to bằng nửa màn hình thì phải cuộn mới thấy bài — thu nhỏ và
        xếp ngang với phần chữ thay vì chồng lên nhau. */
     .hero { gap:16px; padding:16px; flex-wrap:nowrap; align-items:flex-start; }
@@ -191,23 +204,24 @@
           {% if post.note %}<span class="flag">{{ post.note }}</span>{% endif %}
         </div>
 
-        {% if post.status in ('approved', 'blocked') %}
-          {# Sửa ngay tại chỗ: card lấy chữ từ dòng đầu, thấy tiêu đề dở mà phải mở
-             màn hình khác mới sửa được thì sẽ không ai sửa. #}
-          <details class="edit">
-            <summary>Sửa nội dung</summary>
-            <form method="post" action="/posts/{{ post.id }}/update">
-              <textarea name="content" rows="8" spellcheck="false">{{ post.content }}</textarea>
-              <input type="url" name="affiliate_link" value="{{ post.affiliate_link or '' }}"
-                     placeholder="Link affiliate — đăng xuống comment, để trống cũng được">
-              <div class="editfoot">
-                <button class="primary small" type="submit">Lưu</button>
-                <span class="dim">Dòng đầu tiên là chữ in trên card.</span>
-              </div>
-            </form>
-          </details>
-        {% endif %}
       </div>
+
+      {% if post.status in ('approved', 'blocked') %}
+        {# Sửa ngay tại chỗ: card lấy chữ từ dòng đầu, thấy tiêu đề dở mà phải mở
+           màn hình khác mới sửa được thì sẽ không ai sửa. #}
+        <details class="edit">
+          <summary>Sửa nội dung</summary>
+          <form method="post" action="/posts/{{ post.id }}/update">
+            <textarea name="content" rows="8" spellcheck="false">{{ post.content }}</textarea>
+            <input type="url" name="affiliate_link" value="{{ post.affiliate_link or '' }}"
+                   placeholder="Link affiliate — đăng xuống comment, để trống cũng được">
+            <div class="editfoot">
+              <button class="primary small" type="submit">Lưu</button>
+              <span class="dim">Dòng đầu tiên là chữ in trên card.</span>
+            </div>
+          </form>
+        </details>
+      {% endif %}
 
       <div class="tools">
         {% if post.status == 'approved' %}
