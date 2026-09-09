@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}AutoFB — Chia sẻ nhóm{% endblock %}
+
+{% block style %}
+  .why { background:var(--surface); border:1px solid var(--line-soft); border-radius:14px;
+         padding:15px 18px; margin-bottom:18px; font-size:13px; color:var(--muted);
+         line-height:1.6; }
+  .why b { color:var(--text); }
+
+  .add { background:var(--surface); border:1px solid var(--line-soft); border-radius:14px;
+         padding:20px 22px; margin-bottom:22px; box-shadow:var(--shadow); }
+  .add h2 { margin:0 0 4px; font-size:15px; }
+  .add .hint { color:var(--muted); font-size:13px; margin-bottom:10px; }
+  .row { display:grid; grid-template-columns:200px 1fr 170px auto; gap:10px; align-items:end; }
+  @media (max-width:760px) { .row { grid-template-columns:1fr; } }
+
+  /* ---- chọn bài ---- */
+  .pick { margin-bottom:18px; }
+  .pick h2 { font-size:14px; margin:0 0 9px; }
+  .picks { display:flex; gap:8px; overflow-x:auto; padding-bottom:5px; }
+  .pk { flex:none; width:210px; background:var(--surface); border:1px solid var(--line-soft);
+        border-radius:12px; padding:11px 13px; text-decoration:none; color:var(--muted);
+        font-size:12.5px; line-height:1.45; transition:.15s; }
+  .pk:hover { border-color:var(--line); color:var(--text); }
+  .pk.on { border-color:var(--accent); background:var(--accent-dim); color:var(--text); }
+  .pk .t { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+           overflow:hidden; font-weight:500; margin-bottom:5px; }
+  .pk .m { font-size:11.5px; color:var(--faint); }
+
+  /* ---- tiến độ ---- */
+  .bar { background:var(--surface); border:1px solid var(--line-soft); border-radius:14px;
+         padding:15px 18px; margin-bottom:14px; display:flex; align-items:center;
+         gap:14px; flex-wrap:wrap; }
+  .bar .num { font-size:19px; font-weight:700; letter-spacing:-.02em; }
+  .track { flex:1; min-width:140px; height:7px; border-radius:4px; background:var(--raised); }
+  .fill { height:100%; border-radius:4px; background:var(--ok); transition:width .4s; }
+  .bar .cp { margin-left:auto; }
+
+  /* ---- nhóm ---- */
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(255px, 1fr)); gap:11px; }
+  .g { background:var(--surface); border:1px solid var(--line-soft); border-radius:13px;
+       padding:14px 16px; transition:.15s; }
+  .g.done { border-color:color-mix(in srgb, var(--ok) 45%, transparent);
+            background:color-mix(in srgb, var(--ok) 7%, var(--surface)); }
+  .g.off { opacity:.45; }
+  .g .nm { font-weight:600; font-size:14px; margin-bottom:2px; }
+  .g .nt { font-size:12px; color:var(--faint); margin-bottom:11px; min-height:15px; }
+  .g .btns { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .g .tick { color:var(--ok); font-size:12.5px; font-weight:600; }
+  .g .more { margin-left:auto; display:flex; gap:4px; }
+  .empty { padding:22px; text-align:center; color:var(--faint); font-size:13.5px; }
+{% endblock %}
+
+{% block content %}
+<div class="why">
+  Facebook <b>không cho đăng vào nhóm bằng API</b> — Meta gỡ Groups API từ 22/04/2024,
+  mọi công cụ tự động (kể cả Meta Business Suite) đều mất tính năng này. Nên phần chia sẻ
+  vào nhóm phải bấm tay. Màn hình này giữ sẵn danh sách nhóm, sao chép sẵn nội dung và
+  nhớ giúp bạn <b>đã chia sẻ bài nào vào nhóm nào</b> để không sót và không đăng trùng.
+</div>
+
+<div class="add">
+  <h2>Thêm nhóm</h2>
+  <div class="hint">Mở nhóm trên Facebook rồi sao chép địa chỉ trên thanh trình duyệt dán vào đây.</div>
+  <form method="post" action="/share/groups/add">
+    <div class="row">
+      <div>
+        <label>Tên nhóm</label>
+        <input type="text" name="name" required placeholder="Hội bóng đá Việt Nam">
+      </div>
+      <div>
+        <label>Địa chỉ nhóm</label>
+        <input type="url" name="url" required placeholder="https://www.facebook.com/groups/...">
+      </div>
+      <div>
+        <label>Ghi chú (tuỳ chọn)</label>
+        <input type="text" name="note" placeholder="200k thành viên">
+      </div>
+      <button class="primary" type="submit">Thêm</button>
+    </div>
+  </form>
+</div>
+
+{% if not chosen %}
+  <div class="card"><div class="empty">Fanpage chưa có bài nào để chia sẻ.</div></div>
+{% else %}
+  <div class="pick">
+    <h2>Chọn bài muốn chia sẻ</h2>
+    <div class="picks">
+      {% for p in posts %}
+        <a class="pk {{ 'on' if p.id == chosen.id }}" href="/share?post={{ p.id }}">
+          <div class="t">{{ p.headline }}</div>
+          <div class="m">{{ p.age }} · {{ counts_by_post.get(p.id, 0) }} nhóm</div>
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="bar">
+    <div class="num" id="done">{{ done_count }}</div>
+    <div style="font-size:13px; color:var(--muted)">/ {{ active_count }} nhóm đã chia sẻ</div>
+    <div class="track">
+      <div class="fill" id="fill"
+           style="width:{{ (done_count / active_count * 100) if active_count else 0 }}%"></div>
+    </div>
+    <button class="small cp" type="button" onclick="salin()">Sao chép nội dung</button>
+  </div>
+
+  {# Nội dung để dán vào nhóm: chữ của bài + link bài trên Page. Có link thì người
+     trong nhóm bấm vào là về Page, đó mới là chỗ kéo người theo dõi. #}
+  <textarea id="src" style="position:absolute; left:-9999px" aria-hidden="true"
+  >{{ chosen.headline }}
+
+{{ chosen.permalink }}</textarea>
+
+  <div class="grid">
+    {% for g in groups %}
+      <div class="g {{ 'done' if g.shared }} {{ '' if g.enabled else 'off' }}" id="g{{ g.id }}">
+        <div class="nm">{{ g.name }}</div>
+        <div class="nt">{{ g.note }}</div>
+        <div class="btns">
+          {# Địa chỉ nhóm đi qua data-url chứ không nhét thẳng vào onclick: URL do người
+             dùng gõ, ghép chuỗi vào JS là mở đường chèn mã. #}
+          <button class="small go openg" type="button"
+                  data-id="{{ g.id }}" data-url="{{ g.url }}">Mở &amp; sao chép</button>
+          <span class="tick" style="{{ '' if g.shared else 'display:none' }}"
+                id="t{{ g.id }}">✓ đã chia sẻ</span>
+          <button class="small undog" type="button" id="u{{ g.id }}" data-id="{{ g.id }}"
+                  style="{{ '' if g.shared else 'display:none' }}">Bỏ đánh dấu</button>
+          <span class="more">
+            <form class="inline" method="post" action="/share/groups/{{ g.id }}/toggle">
+              <button class="small" type="submit">{{ 'Tắt' if g.enabled else 'Bật' }}</button>
+            </form>
+            <form class="inline" method="post" action="/share/groups/{{ g.id }}/delete"
+                  onsubmit="return confirm('Xoá nhóm này khỏi danh sách?')">
+              <button class="small danger" type="submit">Xoá</button>
+            </form>
+          </span>
+        </div>
+      </div>
+    {% else %}
+      <div class="card"><div class="empty">Chưa có nhóm nào — thêm ở ô phía trên.</div></div>
+    {% endfor %}
+  </div>
+
+<script>
+const BAI = {{ chosen.id|tojson }};
+const TONG = {{ active_count }};
+
+function salin() {
+  const t = document.getElementById('src');
+  // navigator.clipboard cần HTTPS; trang chạy sau Cloudflare Tunnel nên có. Vẫn giữ
+  // đường lui execCommand cho trình duyệt cũ, không thì bấm xong không có gì xảy ra.
+  if (navigator.clipboard) { navigator.clipboard.writeText(t.value); return; }
+  t.style.left = '0'; t.select(); document.execCommand('copy'); t.style.left = '-9999px';
+}
+
+async function danhDau(id, undo) {
+  const r = await fetch('/share/mark', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({fb_post_id: BAI, group_id: id, undo: !!undo}),
+  });
+  const d = await r.json();
+  if (!d.ok) return;
+  document.getElementById('g' + id).classList.toggle('done', d.shared);
+  document.getElementById('t' + id).style.display = d.shared ? '' : 'none';
+  document.getElementById('u' + id).style.display = d.shared ? '' : 'none';
+  document.getElementById('done').textContent = d.done;
+  document.getElementById('fill').style.width = (TONG ? d.done / TONG * 100 : 0) + '%';
+}
+
+document.querySelectorAll('.openg').forEach(b => b.addEventListener('click', () => {
+  salin();
+  danhDau(Number(b.dataset.id), false);
+  // Mở tab mới thay vì chuyển trang: chia sẻ xong quay lại là còn nguyên danh sách,
+  // không phải chọn lại bài từ đầu.
+  window.open(b.dataset.url, '_blank', 'noopener');
+}));
+
+document.querySelectorAll('.undog').forEach(b => b.addEventListener(
+  'click', () => danhDau(Number(b.dataset.id), true)));
+</script>
+{% endif %}
+{% endblock %}

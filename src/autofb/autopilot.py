@@ -18,7 +18,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from . import cleanup, scheduler
+from . import cleanup, scheduler, threads_token
 from .football import planner as football
 from .config import Config
 from .crawler.pipeline import run_crawl
@@ -101,6 +101,10 @@ def run_publish_tick(config: Config, conn: sqlite3.Connection,
     if SystemState().paused:
         report.paused = True
         return report
+
+    # Token Threads sống 60 ngày và quá hạn thì hỏng vĩnh viễn. Gia hạn ở đây, trước
+    # mọi thứ khác: đây là lượt chạy 5 phút một lần, chắc chắn tới hạn là gia hạn kịp.
+    threads_token.maybe_refresh(conn)
 
     decision = scheduler.decide(config, conn)
     report.reason = decision.reason

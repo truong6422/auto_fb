@@ -23,11 +23,14 @@ from ..runtime_settings import (
 )
 from ..scheduler import VN_TIMEZONE, decide, now_vn, posted_today
 from ..publisher import publish_approved
-from ..settings import load_env, load_facebook_settings, silence_token_leak
+from ..settings import (
+    load_env, load_facebook_settings, load_threads_settings, silence_token_leak,
+)
 from .auth import BasicAuthMiddleware
 from .fanpage_feed import (
     LIMIT as feed_limit, forget as forget_feed, recent_posts as fanpage_posts,
 )
+from .share import build_context as share_context, router as share_router
 from .state import SystemState
 
 # Nạp .env NGAY khi import: middleware xác thực đọc AUTOFB_PASSWORD từ os.environ,
@@ -41,6 +44,7 @@ app = FastAPI(title="AutoFB", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(BasicAuthMiddleware)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 state = SystemState()
+app.include_router(share_router)
 
 
 @app.get("/healthz")
@@ -127,6 +131,7 @@ def _fanpage_items() -> tuple[list[dict], str]:
     """Bài đã lên Fanpage, dọn sẵn cho template. Trả kèm lời báo lỗi nếu không lấy được."""
     posts, error = fanpage_posts()
     items = [{
+        "id": post.id,
         # Facebook trả "2026-09-09T09:35:02+0000" — fromisoformat đọc được từ 3.11.
         "age": _humanize_age(post.created_time),
         "headline": (post.message.split("\n")[0] if post.message else "(bài không có chữ)"),
@@ -149,6 +154,8 @@ def _counts(conn) -> dict[str, int]:
     # mở trang mới biết.
     counts["links_active"] = conn.execute(
         "SELECT COUNT(*) FROM affiliate_link WHERE enabled = 1").fetchone()[0]
+    counts["groups_active"] = conn.execute(
+        "SELECT COUNT(*) FROM fb_group WHERE enabled = 1").fetchone()[0]
     return counts
 
 
@@ -217,6 +224,9 @@ def index(request: Request, tab: str = "queue"):
                 "schedule": config.schedule,
                 "queue_by_sport": [dict(r) for r in sports],
                 "now": now_vn().strftime("%H:%M"),
+                # Chưa nối Threads thì phần đăng lại tự tắt lặng lẽ — phải nhìn thấy
+                # được, không thì tưởng nó đang chạy mà thật ra không đăng gì.
+                "threads_on": load_threads_settings().configured,
                 "progress": round(plan.posted_today / plan.quota * 100) if plan.quota else 0,
             },
         )
@@ -457,6 +467,21 @@ def delete_link(link_id: int):
         conn.execute("DELETE FROM affiliate_link WHERE id = ?", (link_id,))
         conn.commit()
     return RedirectResponse("/links", status_code=303)
+
+
+@app.get("/share")
+def share_page(request: Request, post: str = ""):
+    """Chia sẻ bài lên nhóm Facebook — bấm tay, vì API đăng nhóm đã bị Meta gỡ.
+
+    Danh sách bài lấy từ Fanpage chứ không từ DB: chia sẻ là chia sẻ bài ĐANG NẰM
+    trên Page, mà Page còn có cả bài không do AutoFB đăng.
+    """
+    feed, feed_error = _fanpage_items()
+    with db.session() as conn:
+        context = share_context(conn, feed, post)
+        context.update(counts=_counts(conn), paused=state.paused, page="share",
+                       labels=SPORT_LABELS, feed_error=feed_error)
+    return templates.TemplateResponse(request=request, name="share.html", context=context)
 
 
 @app.post("/toggle-pause")

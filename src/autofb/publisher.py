@@ -14,6 +14,9 @@ from datetime import datetime, timezone
 from .card_renderer import FontMissingError, render_for_post
 from .config import CardSettings, load_config
 from .facebook import AuthError, FacebookClient, PermanentError, TransientError
+from .settings import load_threads_settings
+from .threads import ThreadsClient
+from .threads_token import active_token
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,7 @@ BACKOFF_SECONDS = (2, 6)
 class PublishReport:
     posted: int = 0
     commented: int = 0
+    threaded: int = 0
     failed: int = 0
     errors: list[str] = field(default_factory=list)
     # Khác None nghĩa là lượt bị dừng vì token/quyền, KHÔNG phải vì bài hỏng.
@@ -32,6 +36,8 @@ class PublishReport:
 
     def summary(self) -> str:
         base = f"đăng {self.posted} bài | {self.commented} comment | lỗi {self.failed}"
+        if self.threaded:
+            base += f" | Threads {self.threaded}"
         return base + (f" | DỪNG: {self.auth_broken}" if self.auth_broken else "")
 
 
@@ -93,6 +99,45 @@ def _publish_comment(
         )
         report.errors.append(f"#{post['id']} comment: {exc}")
         logger.error("Bài #%s đã đăng nhưng comment lỗi: %s", post["id"], exc)
+
+
+def _publish_threads(
+    client: FacebookClient, conn: sqlite3.Connection, post: sqlite3.Row,
+    fb_post_id: str, report: PublishReport,
+) -> None:
+    """Đăng lại bài sang Threads. Lỗi ở đây KHÔNG làm bài Facebook thành thất bại.
+
+    Ảnh mượn lại bản Facebook vừa nhận: card vẽ trong RAM, không có file trên đĩa để
+    đưa cho Threads tải, mà mở một đường công khai vào máy chỉ để phục vụ việc này thì
+    đắt hơn nhiều so với thứ nhận được.
+    """
+    settings = load_threads_settings()
+    if not settings.configured:
+        return                                  # chưa cấu hình thì bỏ qua, không phải lỗi
+
+    # Lấy token từ threads_token chứ không lấy thẳng trong .env: token Threads sống 60
+    # ngày và được hệ thống tự gia hạn, bản mới nhất nằm trong DB.
+    token = active_token(conn) or settings.access_token
+
+    try:
+        picture = client.post_picture(fb_post_id)
+    except (TransientError, PermanentError, AuthError) as exc:
+        logger.warning("Không lấy được ảnh bài #%s cho Threads: %s", post["id"], exc)
+        picture = ""
+
+    link = f"https://www.facebook.com/{fb_post_id}"
+    try:
+        result = ThreadsClient(settings.user_id, token).post(
+            post["content"], image_url=picture, link=link)
+    except (TransientError, PermanentError) as exc:
+        conn.execute("UPDATE post SET threads_status = 'failed' WHERE id = ?", (post["id"],))
+        report.errors.append(f"#{post['id']} Threads: {exc}")
+        logger.error("Bài #%s không đăng được sang Threads: %s", post["id"], exc)
+        return
+
+    conn.execute("UPDATE post SET threads_status = 'posted', threads_id = ? WHERE id = ?",
+                 (result.id, post["id"]))
+    report.threaded += 1
 
 
 def _field(post: sqlite3.Row, name: str):
@@ -191,6 +236,7 @@ def publish_one(
     report.posted += 1
 
     _publish_comment(client, conn, post, report)
+    _publish_threads(client, conn, post, fb_post_id, report)
 
 
 def due_manual_posts(conn: sqlite3.Connection, limit: int = 1) -> list[sqlite3.Row]:

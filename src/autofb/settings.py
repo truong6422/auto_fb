@@ -104,6 +104,36 @@ def load_facebook_settings() -> FacebookSettings:
     )
 
 
+@dataclass(frozen=True)
+class ThreadsSettings:
+    """Threads dùng token RIÊNG, không phải Page token của Facebook.
+
+    Hai hệ khác nhau dù cùng nhà Meta: token Threads cấp qua graph.threads.net và
+    gắn với tài khoản Threads, không suy ra được từ token Fanpage.
+    """
+
+    user_id: str
+    access_token: str
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.user_id and self.access_token)
+
+    @property
+    def masked_token(self) -> str:
+        if not self.access_token:
+            return "(chưa có)"
+        return f"{self.access_token[:6]}…{self.access_token[-4:]}"
+
+
+def load_threads_settings() -> ThreadsSettings:
+    """Chưa điền gì thì configured = False và toàn bộ phần Threads tự tắt."""
+    return ThreadsSettings(
+        user_id=current_value("THREADS_USER_ID"),
+        access_token=current_value("THREADS_ACCESS_TOKEN"),
+    )
+
+
 def silence_token_leak() -> None:
     """Tắt log INFO của httpx.
 

@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS post (
     ref                TEXT,                                -- khoá chống trùng bài bóng đá
     card_kind          TEXT    NOT NULL DEFAULT 'title',    -- title | table
     card_data          TEXT,                                -- JSON dựng card bảng
+    threads_id         TEXT,                                -- id bài đăng lại trên Threads
+    threads_status     TEXT    NOT NULL DEFAULT 'none',     -- none|posted|failed
     scheduled_at       TEXT,                                -- bài tự soạn: hẹn giờ đăng
     image_url          TEXT,                                -- ảnh minh hoạ (URL của nguồn)
     image_credit       TEXT,                                -- tên báo sở hữu ảnh
@@ -81,6 +83,31 @@ CREATE TABLE IF NOT EXISTS affiliate_link (
     created_at  TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_link_sport ON affiliate_link(sport, enabled);
+
+-- Nhóm Facebook để chia sẻ bài vào.
+--
+-- KHÔNG có chỗ nào trong code đăng bài vào nhóm, và sẽ không có: Meta gỡ toàn bộ
+-- Groups API ngày 22/04/2024 (xoá permission publish_to_groups trên mọi phiên bản).
+-- Cách duy nhất còn lại là bấm tay. Bảng này chỉ để việc bấm tay đó nhanh và không
+-- sót nhóm — nhớ giúp người dùng đã chia sẻ bài nào vào đâu rồi.
+CREATE TABLE IF NOT EXISTS fb_group (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT    NOT NULL,
+    url         TEXT    NOT NULL UNIQUE,
+    note        TEXT    NOT NULL DEFAULT '',
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT    NOT NULL
+);
+
+-- Bài nào đã chia sẻ vào nhóm nào.
+-- Khoá theo fb_post_id chứ không theo post.id: danh sách bài trên màn hình lấy từ
+-- Fanpage, mà Fanpage có cả bài không do AutoFB đăng.
+CREATE TABLE IF NOT EXISTS group_share (
+    fb_post_id  TEXT    NOT NULL,
+    group_id    INTEGER NOT NULL REFERENCES fb_group(id) ON DELETE CASCADE,
+    shared_at   TEXT    NOT NULL,
+    PRIMARY KEY (fb_post_id, group_id)
+);
 
 -- Thông số nhịp chạy sửa được từ màn hình web (runtime_settings.py).
 -- Chỉ chứa phần ĐÈ LÊN config/sources.yaml: không có dòng nào thì dùng giá trị trong file.
@@ -123,6 +150,11 @@ _ADDED_COLUMNS = (
     ("post", "ref", "TEXT"),
     ("post", "card_kind", "TEXT NOT NULL DEFAULT 'title'"),
     ("post", "card_data", "TEXT"),
+    # Đăng lại sang Threads: trạng thái TÁCH RIÊNG khỏi status của bài, y như comment.
+    # Bài đã lên Facebook rồi mà Threads hỏng thì không được coi là bài hỏng — đăng
+    # lại là ra hai bài trùng trên Fanpage.
+    ("post", "threads_id", "TEXT"),
+    ("post", "threads_status", "TEXT NOT NULL DEFAULT 'none'"),  # none|posted|failed
 )
 
 

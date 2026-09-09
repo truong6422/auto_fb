@@ -46,6 +46,24 @@ class AuthError(PermanentError):
     """
 
 
+def classify_meta_error(body: dict, status_code: int) -> Exception:
+    """Đổi lỗi Graph API thành đúng một trong ba loại ngoại lệ ở trên.
+
+    Để ở mức module chứ không nằm trong FacebookClient vì Threads (graph.threads.net)
+    trả lỗi y hệt khuôn này — cùng nhà Meta, cùng cấu trúc {"error": {...}}.
+    """
+    error = body.get("error", {})
+    code = error.get("code")
+    message = error.get("message", f"HTTP {status_code}")
+
+    if code in _TRANSIENT_CODES or status_code >= 500:
+        return TransientError(f"[{code}] {message}")
+    # Dải 200–299 là nhóm lỗi quyền của Graph API, không liệt kê hết từng mã được.
+    if code in _AUTH_CODES or (isinstance(code, int) and 200 <= code <= 299):
+        return AuthError(f"[{code}] {message}")
+    return PermanentError(f"[{code}] {message}")
+
+
 @dataclass(frozen=True)
 class PageInfo:
     id: str
@@ -106,20 +124,9 @@ class FacebookClient:
         if response.is_success:
             return body
 
-        raise self._classify(body, response.status_code)
+        raise classify_meta_error(body, response.status_code)
 
-    @staticmethod
-    def _classify(body: dict, status_code: int) -> Exception:
-        error = body.get("error", {})
-        code = error.get("code")
-        message = error.get("message", f"HTTP {status_code}")
-
-        if code in _TRANSIENT_CODES or status_code >= 500:
-            return TransientError(f"[{code}] {message}")
-        # Dải 200–299 là nhóm lỗi quyền của Graph API, không liệt kê hết từng mã được.
-        if code in _AUTH_CODES or (isinstance(code, int) and 200 <= code <= 299):
-            return AuthError(f"[{code}] {message}")
-        return PermanentError(f"[{code}] {message}")
+    _classify = staticmethod(classify_meta_error)
 
     # ---------- thao tác ----------
 
@@ -234,6 +241,17 @@ class FacebookClient:
         if not post_id:
             raise PermanentError(f"Facebook không trả về id bài đăng: {body}")
         return str(post_id)
+
+    def post_picture(self, fb_post_id: str) -> str:
+        """URL ảnh Facebook đang hiển thị cho bài này.
+
+        Dùng để đăng lại sang Threads: Threads đòi ảnh phải nằm ở một URL công khai
+        tải được. Card của mình vẽ trong RAM và không lưu ra đĩa, nên mượn luôn bản
+        Facebook vừa nhận — vừa khỏi mở thêm đường công khai vào máy, vừa chắc chắn
+        hai nơi hiện đúng một tấm ảnh.
+        """
+        body = self._request("GET", f"{fb_post_id}?fields=full_picture")
+        return body.get("full_picture") or ""
 
     def publish_comment(self, fb_post_id: str, message: str) -> str:
         """Đăng comment dưới bài đã đăng — nơi đặt link affiliate."""

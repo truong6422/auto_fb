@@ -160,6 +160,7 @@
       <div class="fact">Khung giờ<b>{{ schedule.start_hour }}h–{{ schedule.end_hour }}h</b></div>
       <div class="fact">Giãn cách<b>{{ schedule.min_gap_minutes }} phút</b></div>
       <div class="fact">Chờ đăng<b>{{ counts.approved or 0 }}</b></div>
+      <div class="fact">Threads<b>{{ 'đang đăng kèm' if threads_on else 'chưa nối' }}</b></div>
     </div>
   </div>
 </div>
