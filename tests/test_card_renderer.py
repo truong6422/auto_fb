@@ -9,7 +9,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import pytest  # noqa: E402
 from PIL import Image  # noqa: E402
 
-from autofb.card_renderer import pick_gradient, render_card, title_of  # noqa: E402
+from autofb.card_renderer import (  # noqa: E402
+    pick_gradient, render_card, scaled, title_of,
+)
 from autofb.config import CardSettings  # noqa: E402
 
 CARD = CardSettings(width=540, height=675, max_font_size=60, min_font_size=22)
@@ -74,3 +76,27 @@ class TestLayTieuDe:
 
     def test_bai_rong_tra_ve_chuoi_rong(self):
         assert title_of("\n \n") == ""
+
+
+class TestBanThuNho:
+    """Ảnh xem trước trong danh sách: cùng bố cục, vẽ nhanh hơn nhiều."""
+
+    def test_thu_nho_dung_ti_le(self):
+        small = scaled(CARD, 0.5)
+        assert (small.width, small.height) == (270, 338)
+        assert small.max_font_size == 30 and small.min_font_size == 11
+
+    def test_giu_nguyen_bang_mau(self):
+        """Đổi màu giữa bản xem trước và bản đăng thật là lừa người dùng."""
+        assert scaled(CARD, 0.3).gradients == CARD.gradients
+        assert pick_gradient(scaled(CARD, 0.3), 5) == pick_gradient(CARD, 5)
+
+    def test_tat_bong_do(self):
+        """Bóng đổ chiếm nửa thời gian vẽ mà ở cỡ nhỏ chỉ làm chữ nhoè."""
+        assert CARD.shadow is True
+        assert scaled(CARD, 0.3).shadow is False
+
+    def test_khong_thu_nho_xuong_duoi_muc_ve_duoc(self):
+        tiny = scaled(CARD, 0.001)
+        assert tiny.width >= 80 and tiny.min_font_size >= 6
+        assert render_card("Tin", tiny).startswith(b"\x89PNG")

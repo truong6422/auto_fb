@@ -171,8 +171,8 @@
       {# Card tiêu đề hiện trước vì trên feed nó cũng là ảnh đầu tiên người đọc thấy. #}
       <a href="/posts/{{ post.id }}/card.png" target="_blank" rel="noopener"
          title="Xem card cỡ thật">
-        <img class="thumb card" src="/posts/{{ post.id }}/card.png" alt="Card tiêu đề"
-             loading="lazy">
+        <img class="thumb card" src="/posts/{{ post.id }}/card.png?size=thumb"
+             alt="Card tiêu đề" loading="lazy">
       </a>
       {% if post.image_url %}
         <img class="thumb" src="{{ post.image_url }}" alt="" loading="lazy">

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import io
 import textwrap
+from dataclasses import replace
+from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -38,6 +40,10 @@ class FontMissingError(RuntimeError):
     """
 
 
+# Nhớ font đã nạp: _fit_title dò cỡ chữ bằng cách nạp lại font hàng chục lần cho MỖI
+# card, và nạp font là phần tốn thời gian nhất của cả hàm vẽ. Font là bất biến nên
+# nhớ lại hoàn toàn an toàn. 64 ô là thừa cho mọi cỡ chữ mà cấu hình sinh ra.
+@lru_cache(maxsize=64)
 def _load_font(path: Path, size: int) -> ImageFont.FreeTypeFont:
     if not path.exists():
         raise FontMissingError(f"Không tìm thấy font: {path}")
@@ -118,8 +124,12 @@ def _fit_title(
 def _draw_centered(
     draw: ImageDraw.ImageDraw, lines: list[str], font: ImageFont.FreeTypeFont,
     line_height: int, box: tuple[int, int, int, int], color: str,
+    shadow: bool = True,
 ) -> None:
     left, top, right, bottom = box
+    # Bóng đổ co theo bề ngang card: để cố định 3px thì bản thumbnail có bóng dày
+    # gần bằng nét chữ, nhìn thành chữ nhoè.
+    offset = max(round((right - left) * 0.003), 1)
     block_height = len(lines) * line_height
     y = top + (bottom - top - block_height) / 2
     centre_x = (left + right) / 2
@@ -127,8 +137,11 @@ def _draw_centered(
     for line in lines:
         width = font.getlength(line)
         x = centre_x - width / 2
-        # Bóng đổ mờ: gradient sáng (vàng, cam) làm chữ trắng bị chìm nếu để trần.
-        draw.text((x + 3, y + 3), line, font=font, fill=(0, 0, 0, 70))
+        # Bóng đổ mờ giúp chữ trắng không chìm vào chỗ gradient sáng. Vẽ bóng là
+        # dựng glyph thêm một lần nữa — chiếm nửa thời gian vẽ, nên bản thumbnail
+        # tắt hẳn (ở 302px bóng 1px chỉ làm chữ nhoè, không giúp đọc dễ hơn).
+        if shadow:
+            draw.text((x + offset, y + offset), line, font=font, fill=(0, 0, 0, 70))
         draw.text((x, y), line, font=font, fill=color)
         y += line_height
 
@@ -141,6 +154,24 @@ def pick_gradient(settings: CardSettings, seed: int) -> tuple[str, str]:
     """
     palette = settings.gradients
     return tuple(palette[seed % len(palette)])  # type: ignore[return-value]
+
+
+def scaled(settings: CardSettings, factor: float) -> CardSettings:
+    """Bản thu nhỏ của cùng một thiết kế card, dùng cho ảnh xem trước trong danh sách.
+
+    Vẽ card cỡ thật mất 1,7 giây trên CPU A53 của box; danh sách 10 bài là 17 giây,
+    trang tải xong mà mọi ô ảnh vẫn trống. Thu nhỏ theo cùng một hệ số cho MỌI kích
+    thước (khổ ảnh lẫn cỡ chữ) nên bố cục y hệt bản thật — cái người dùng nhìn thấy
+    trong danh sách đúng là cái sẽ lên Facebook, chỉ nhỏ hơn.
+    """
+    return replace(
+        settings,
+        width=max(round(settings.width * factor), 80),
+        height=max(round(settings.height * factor), 100),
+        max_font_size=max(round(settings.max_font_size * factor), 8),
+        min_font_size=max(round(settings.min_font_size * factor), 6),
+        shadow=False,
+    )
 
 
 def render_card(
@@ -172,7 +203,7 @@ def render_card(
     _draw_centered(
         draw, lines, font, line_height,
         (margin, top_band, width - margin, height - bottom_band),
-        settings.text_color,
+        settings.text_color, settings.shadow,
     )
 
     small = _load_font(LABEL_FONT, round(width * 0.028))

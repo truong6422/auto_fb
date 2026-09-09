@@ -55,6 +55,9 @@ class CardSettings:
     max_font_size: int = 96
     min_font_size: int = 44
     text_color: str = "#FFFFFF"
+    # Bóng đổ dưới chữ. Tốn khoảng một nửa thời gian vẽ (phải dựng glyph hai lần),
+    # nên ảnh xem trước trong danh sách tự tắt — xem card_renderer.scaled().
+    shadow: bool = True
     brand: str = ""
     gradients: list[list[str]] = field(default_factory=lambda: list(DEFAULT_GRADIENTS))
 

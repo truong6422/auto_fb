@@ -12,7 +12,7 @@ from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from .. import db
-from ..card_renderer import FontMissingError, render_card, title_of
+from ..card_renderer import FontMissingError, render_card, scaled, title_of
 from ..config import load_config
 from ..facebook import AuthError, FacebookClient, PermanentError, TransientError
 from ..autopilot import run_tick
@@ -181,8 +181,13 @@ def index(request: Request, tab: str = "queue"):
         )
 
 
+# Hệ số thu nhỏ cho ảnh xem trước trong danh sách. 0,28 cho ra 302x378 — đủ để nhìn
+# ra bố cục và đọc được tiêu đề khi phóng to, mà vẽ nhanh hơn khoảng 12 lần.
+THUMB_SCALE = 0.28
+
+
 @app.get("/posts/{post_id}/card.png")
-def post_card(post_id: int):
+def post_card(post_id: int, size: str = ""):
     """Xem trước đúng tấm card sẽ đăng lên Facebook.
 
     Render lại tại chỗ thay vì lưu file: card chỉ phụ thuộc nội dung + id bài, vẽ mất
@@ -195,9 +200,13 @@ def post_card(post_id: int):
     if row is None:
         return Response(status_code=404)
 
+    card = load_config().card
+    if size == "thumb":
+        card = scaled(card, THUMB_SCALE)
+
     try:
         image = render_card(
-            title_of(row["content"]), load_config().card,
+            title_of(row["content"]), card,
             seed=row["id"], source_name=row["image_credit"],
         )
     except (ValueError, FontMissingError) as exc:
