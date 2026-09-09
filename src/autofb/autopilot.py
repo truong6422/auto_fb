@@ -16,13 +16,15 @@ cái kia.
 import logging
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from . import cleanup, scheduler
+from .football import planner as football
 from .config import Config
 from .crawler.pipeline import run_crawl
 from .facebook import FacebookClient
 from .post_pipeline import build_pending_posts
-from .publisher import publish_approved
+from .publisher import publish_approved, publish_due_football
 from .web.state import SystemState
 
 logger = logging.getLogger(__name__)
@@ -36,6 +38,7 @@ QUEUE_HIGH_WATER = 20
 class TickReport:
     paused: bool = False
     crawled: int = 0
+    football: int = 0
     built: int = 0
     published: int = 0
     reason: str = ""
@@ -48,6 +51,8 @@ class TickReport:
             return "HỆ THỐNG ĐANG TẠM DỪNG — không làm gì"
         parts = [f"crawl {self.crawled} tin", f"dựng {self.built} bài",
                  f"đăng {self.published} bài", f"hôm nay {self.posted_today}/{self.quota}"]
+        if self.football:
+            parts.insert(2, f"bóng đá {self.football} bài")
         return " | ".join(parts) + (f"\n  {self.reason}" if self.reason else "")
 
 
@@ -60,6 +65,11 @@ def run_crawl_tick(config: Config, conn: sqlite3.Connection) -> TickReport:
         return report
 
     cleanup.run_cleanup(conn, config.retention_days)
+
+    # Bài bóng đá xét ở MỌI lượt, không nằm sau cổng nhịp kéo RSS: đội hình ra sân
+    # chỉ có giá trị trong khoảng một tiếng trước trận, chờ tới nhịp crawl kế tiếp
+    # là lỡ mất.
+    report.football = football.create_posts(conn, datetime.now(timezone.utc))
 
     decision = scheduler.decide(config, conn)
     report.reason = decision.reason
@@ -97,15 +107,21 @@ def run_publish_tick(config: Config, conn: sqlite3.Connection,
     report.posted_today = decision.posted_today
     report.quota = decision.quota
 
-    if not decision.should_publish:
-        return report
-
     if client is None:
         report.notes.append("chưa cấu hình Facebook — không đăng")
         return report
 
+    # Bài bóng đá đi trước và KHÔNG qua cổng hạn ngạch/giãn cách: chúng gắn với giờ
+    # thi đấu thật. Đội hình ra sân đăng trễ 45 phút vì chờ giãn cách là bóng đã lăn.
+    football_result = publish_due_football(client, conn, config.card)
+    report.published += football_result.posted
+    report.notes.extend(football_result.errors)
+
+    if not decision.should_publish:
+        return report
+
     result = publish_approved(client, conn, limit=1, card=config.card)
-    report.published = result.posted
+    report.published += result.posted
     report.notes.extend(result.errors)
     return report
 

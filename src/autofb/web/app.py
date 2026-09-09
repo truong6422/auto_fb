@@ -12,7 +12,7 @@ from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from .. import db
-from ..card_renderer import FontMissingError, render_card, scaled, title_of
+from ..card_renderer import FontMissingError, render_for_post
 from ..config import load_config
 from ..facebook import AuthError, FacebookClient, PermanentError, TransientError
 from ..autopilot import run_tick
@@ -199,21 +199,12 @@ def post_card(post_id: int, size: str = ""):
     vài chục mili giây, mà box chạy trên USB ghi rất chậm nên tránh sinh file rác.
     """
     with db.session() as conn:
-        row = conn.execute(
-            "SELECT id, content, image_credit FROM post WHERE id = ?", (post_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM post WHERE id = ?", (post_id,)).fetchone()
     if row is None:
         return Response(status_code=404)
 
-    card = load_config().card
-    if size == "thumb":
-        card = scaled(card, THUMB_SCALE)
-
     try:
-        image = render_card(
-            title_of(row["content"]), card,
-            seed=row["id"], source_name=row["image_credit"],
-        )
+        image = render_for_post(row, load_config().card, thumb=(size == "thumb"))
     except (ValueError, FontMissingError) as exc:
         return Response(f"Không vẽ được card: {exc}", status_code=500, media_type="text/plain")
 

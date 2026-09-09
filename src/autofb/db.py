@@ -55,7 +55,10 @@ CREATE TABLE IF NOT EXISTS post (
     comment_status     TEXT    NOT NULL DEFAULT 'none',     -- none|pending|posted|failed
     fb_post_id         TEXT,                                -- đường lui cho Phase 2 (thu Insights)
     note               TEXT,                                -- lý do bị chặn / ghi chú lỗi đăng
-    origin             TEXT    NOT NULL DEFAULT 'auto',     -- auto = bản tin | manual = tự soạn
+    origin             TEXT    NOT NULL DEFAULT 'auto',     -- auto=bản tin | manual=tự soạn | football
+    ref                TEXT,                                -- khoá chống trùng bài bóng đá
+    card_kind          TEXT    NOT NULL DEFAULT 'title',    -- title | table
+    card_data          TEXT,                                -- JSON dựng card bảng
     scheduled_at       TEXT,                                -- bài tự soạn: hẹn giờ đăng
     image_url          TEXT,                                -- ảnh minh hoạ (URL của nguồn)
     image_credit       TEXT,                                -- tên báo sở hữu ảnh
@@ -64,6 +67,9 @@ CREATE TABLE IF NOT EXISTS post (
     posted_at          TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_post_status ON post(status);
+-- UNIQUE cho phép nhiều NULL trong SQLite, nên bài crawl (ref rỗng) không bị chặn,
+-- còn bài bóng đá thì không thể tạo trùng dù vòng lặp chạy 5 phút một lần.
+
 
 CREATE TABLE IF NOT EXISTS affiliate_link (
     id          INTEGER PRIMARY KEY,
@@ -112,6 +118,11 @@ _ADDED_COLUMNS = (
     ("post", "source_url", "TEXT"),
     ("post", "image_credit", "TEXT"),
     ("raw_article", "image_url", "TEXT"),
+    # Bài bóng đá: ref là khoá chống trùng ("pl:lineup:128953"), card_kind chọn kiểu
+    # card, card_data là JSON để vẽ lại card lúc đăng thay vì lưu sẵn ảnh.
+    ("post", "ref", "TEXT"),
+    ("post", "card_kind", "TEXT NOT NULL DEFAULT 'title'"),
+    ("post", "card_data", "TEXT"),
 )
 
 
@@ -120,6 +131,11 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
         if existing and column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    # Tạo SAU khi ALTER: trên DB cũ chưa có cột `ref`, đặt index trong SCHEMA sẽ
+    # lỗi "no such column" ngay lúc khởi động.
+    # UNIQUE cho phép nhiều NULL trong SQLite, nên bài crawl (ref rỗng) không bị chặn.
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_post_ref ON post(ref)")
 
 
 def _relax_post_cluster_id(conn: sqlite3.Connection) -> None:

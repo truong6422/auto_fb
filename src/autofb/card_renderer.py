@@ -44,7 +44,7 @@ class FontMissingError(RuntimeError):
 # card, và nạp font là phần tốn thời gian nhất của cả hàm vẽ. Font là bất biến nên
 # nhớ lại hoàn toàn an toàn. 64 ô là thừa cho mọi cỡ chữ mà cấu hình sinh ra.
 @lru_cache(maxsize=64)
-def _load_font(path: Path, size: int) -> ImageFont.FreeTypeFont:
+def load_font(path: Path, size: int) -> ImageFont.FreeTypeFont:
     if not path.exists():
         raise FontMissingError(f"Không tìm thấy font: {path}")
     return ImageFont.truetype(str(path), size)
@@ -55,8 +55,8 @@ def _hex_to_rgb(value: str) -> tuple[int, int, int]:
     return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
 
 
-def _gradient(size: tuple[int, int], top: str, bottom: str) -> Image.Image:
-    """Nền chuyển màu dọc.
+def gradient(size: tuple[int, int], top: str, bottom: str) -> Image.Image:
+    """Nền chuyển màu dọc. Dùng chung cho card tiêu đề và card bóng đá.
 
     Dựng trên dải 1 pixel bề ngang rồi phóng to: CPU A53 của box rất yếu, vẽ từng pixel
     trên 1080x1350 (1,4 triệu pixel) bằng Python mất vài giây, cách này mất vài mili giây.
@@ -100,14 +100,14 @@ def _fit_title(
     không có công thức đóng. Vòng lặp chạy tối đa vài chục lần, không đáng kể.
     """
     largest, smallest = size_range
-    font = _load_font(TITLE_FONT, smallest)
+    font = load_font(TITLE_FONT, smallest)
     lines = _wrap(text, font, max_width)
     # Giãn dòng 1.32 chứ không phải 1.2 như chữ Latin: tiếng Việt chồng hai tầng dấu
     # ("tuyển", "ướ"), để sát là dấu mũ dòng dưới đâm vào dấu nặng dòng trên.
     line_gap = 1.32
 
     for size in range(largest, smallest - 1, -4):
-        candidate = _load_font(TITLE_FONT, size)
+        candidate = load_font(TITLE_FONT, size)
         wrapped = _wrap(text, candidate, max_width)
         block_height = len(wrapped) * size * line_gap
         if len(wrapped) <= max_lines and block_height <= max_height:
@@ -186,7 +186,7 @@ def render_card(
     width, height = settings.width, settings.height
     top_color, bottom_color = pick_gradient(settings, seed)
 
-    image = _gradient((width, height), top_color, bottom_color)
+    image = gradient((width, height), top_color, bottom_color)
     draw = ImageDraw.Draw(image, "RGBA")
 
     margin = round(width * _SIDE_MARGIN_RATIO)
@@ -206,7 +206,7 @@ def render_card(
         settings.text_color, settings.shadow,
     )
 
-    small = _load_font(LABEL_FONT, round(width * 0.028))
+    small = load_font(LABEL_FONT, round(width * 0.028))
     if settings.brand:
         draw.text((margin, round(top_band * 0.45)), settings.brand.upper(),
                   font=small, fill=(255, 255, 255, 190))
@@ -233,3 +233,36 @@ def title_of(content: str) -> str:
         if line:
             return textwrap.shorten(line, width=220, placeholder="…")
     return ""
+
+
+def render_for_post(post, settings: CardSettings, thumb: bool = False) -> bytes:
+    """Vẽ card đúng kiểu cho một bài: card tiêu đề hoặc card bảng bóng đá.
+
+    Một cửa duy nhất cho publisher và màn hình web, để hai chỗ không bao giờ vẽ ra
+    hai thứ khác nhau — thứ người duyệt nhìn thấy phải đúng thứ sẽ lên Facebook.
+
+    card_data lưu dạng JSON trong DB và card được vẽ LẠI mỗi lần cần, không lưu ảnh:
+    ổ USB của box ghi 2,9 MB/s.
+    """
+    keys = post.keys() if hasattr(post, "keys") else post
+    seed = post["id"]
+    card = scaled(settings, 0.28) if thumb else settings
+
+    if ("card_kind" in keys) and post["card_kind"] == "table":
+        # Import tại chỗ: football.card cũng import ngược lại module này để dùng
+        # chung phần dựng nền, để ở đầu file là vòng lặp import.
+        import json
+
+        from .football.card import Row, render_table_card
+
+        data = json.loads(post["card_data"] or "{}")
+        rows = [Row(**row) for row in data.get("rows") or []]
+        if not rows:
+            raise ValueError("Bài bóng đá thiếu dữ liệu bảng")
+        return render_table_card(
+            data.get("heading", ""), rows, card, seed=seed,
+            subheading=data.get("subheading", ""), footer=data.get("footer", ""),
+        )
+
+    credit = post["image_credit"] if "image_credit" in keys else None
+    return render_card(title_of(post["content"]), card, seed=seed, source_name=credit)

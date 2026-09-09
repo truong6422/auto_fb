@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from .card_renderer import FontMissingError, render_card, title_of
+from .card_renderer import FontMissingError, render_for_post
 from .config import CardSettings, load_config
 from .facebook import AuthError, FacebookClient, PermanentError, TransientError
 
@@ -115,10 +115,7 @@ def build_media(
 
     if card.enabled:
         try:
-            image = render_card(
-                title_of(post["content"]), card,
-                seed=post["id"], source_name=_field(post, "image_credit"),
-            )
+            image = render_for_post(post, card)
             photo_ids.append(
                 _with_retry(lambda: client.upload_unpublished_photo_bytes(image), "Upload card")
             )
@@ -234,6 +231,41 @@ def publish_approved(
             conn.commit()
             report.auth_broken = str(exc)
             logger.error("Dừng lượt đăng — token/quyền hỏng: %s", exc)
+            return report
+        conn.commit()
+
+    return report
+
+
+def publish_due_football(
+    client: FacebookClient, conn: sqlite3.Connection,
+    card: CardSettings | None = None, limit: int = 3,
+) -> PublishReport:
+    """Đăng bài bóng đá đã tới giờ. KHÔNG qua hạn ngạch và giãn cách của bản tin.
+
+    Lý do bỏ qua hai cổng đó: bài bóng đá gắn với giờ thi đấu thật. Đội hình ra sân
+    phải lên trước bóng lăn, chờ đủ 45 phút giãn cách là bóng đã lăn xong.
+
+    limit 3 mỗi lượt: một buổi tối cuối tuần có nhiều trận kết thúc gần nhau, đăng
+    hết cùng lúc trông như spam; 3 bài mỗi 5 phút vẫn kịp mà nhìn tự nhiên hơn.
+    """
+    report = PublishReport()
+    card = card if card is not None else load_config().card
+    now = datetime.now(timezone.utc).isoformat()
+
+    rows = conn.execute(
+        "SELECT * FROM post WHERE status = 'approved' AND origin = 'football'"
+        " AND scheduled_at <= ? ORDER BY scheduled_at ASC LIMIT ?",
+        (now, limit),
+    ).fetchall()
+
+    for post in rows:
+        try:
+            publish_one(client, conn, post, report, card)
+        except AuthError as exc:
+            conn.commit()
+            report.auth_broken = str(exc)
+            logger.error("Dừng đăng bài bóng đá — token/quyền hỏng: %s", exc)
             return report
         conn.commit()
 
