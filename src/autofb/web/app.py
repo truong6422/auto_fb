@@ -25,6 +25,7 @@ from ..scheduler import VN_TIMEZONE, decide, now_vn, posted_today
 from ..publisher import publish_approved
 from ..settings import load_env, load_facebook_settings, silence_token_leak
 from .auth import BasicAuthMiddleware
+from .fanpage_feed import forget as forget_feed, recent_posts as fanpage_posts
 from .state import SystemState
 
 # Nạp .env NGAY khi import: middleware xác thực đọc AUTOFB_PASSWORD từ os.environ,
@@ -120,6 +121,22 @@ def _posts(conn, statuses: tuple[str, ...]) -> list[dict]:
     return posts
 
 
+def _fanpage_items() -> tuple[list[dict], str]:
+    """Bài đã lên Fanpage, dọn sẵn cho template. Trả kèm lời báo lỗi nếu không lấy được."""
+    posts, error = fanpage_posts()
+    items = [{
+        # Facebook trả "2026-09-09T09:35:02+0000" — fromisoformat đọc được từ 3.11.
+        "age": _humanize_age(post.created_time),
+        "headline": (post.message.split("\n")[0] if post.message else "(bài không có chữ)"),
+        "picture": post.picture,
+        "permalink": post.permalink or f"https://facebook.com/{post.id}",
+        "reactions": post.reactions,
+        "comments": post.comments,
+        "shares": post.shares,
+    } for post in posts]
+    return items, error
+
+
 def _counts(conn) -> dict[str, int]:
     rows = conn.execute("SELECT status, COUNT(*) n FROM post GROUP BY status").fetchall()
     counts = {row["status"]: row["n"] for row in rows}
@@ -159,6 +176,11 @@ def index(request: Request, tab: str = "queue"):
         "blocked": ("blocked", "failed"),
     }.get(tab, ("approved",))
 
+    # Mục "Đã đăng" lấy từ Fanpage: ở đó có số tương tác thật, còn DB chỉ giữ phần
+    # sổ sách. Facebook không trả lời được thì rơi về danh sách trong DB — vẫn hơn
+    # là hiện một trang trống.
+    feed, feed_error = _fanpage_items() if tab == "posted" else ([], "")
+
     with db.session() as conn:
         config = effective_config(conn)
         plan = decide(config, conn)
@@ -171,6 +193,8 @@ def index(request: Request, tab: str = "queue"):
             name="index.html",
             context={
                 "posts": _posts(conn, statuses),
+                "feed": feed,
+                "feed_error": feed_error,
                 "counts": _counts(conn),
                 "tab": tab,
                 "labels": SPORT_LABELS,
@@ -200,7 +224,9 @@ def post_card(post_id: int, size: str = ""):
     """
     with db.session() as conn:
         row = conn.execute("SELECT * FROM post WHERE id = ?", (post_id,)).fetchone()
-    if row is None:
+    # Nội dung rỗng = bài cũ đã được cleanup rút gọn. Bản chính vẫn nằm trên Facebook,
+    # ở đây không còn gì để vẽ lại.
+    if row is None or not row["content"]:
         return Response(status_code=404)
 
     try:
@@ -298,6 +324,8 @@ def publish_post_now(post_id: int):
                 conn.commit()
                 return RedirectResponse("/?tab=queue", status_code=303)
             conn.commit()
+    # Vừa đăng xong mà mục "Đã đăng" còn nhớ tạm bản cũ thì trông như bấm hụt.
+    forget_feed()
     return RedirectResponse("/?tab=posted", status_code=303)
 
 
@@ -310,6 +338,7 @@ def publish_approved_now(limit: int = 1):
     client = FacebookClient(fb.page_id, fb.access_token, fb.api_version)
     with db.session() as conn:
         publish_approved(client, conn, limit, load_config().card)
+    forget_feed()
     return RedirectResponse("/?tab=posted", status_code=303)
 
 

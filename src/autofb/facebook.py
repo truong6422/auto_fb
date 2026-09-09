@@ -52,6 +52,20 @@ class PageInfo:
     name: str
 
 
+@dataclass(frozen=True)
+class PagePost:
+    """Một bài ĐANG NẰM TRÊN Fanpage, kèm số tương tác thật."""
+
+    id: str
+    message: str
+    created_time: str                # ISO 8601 do Facebook trả về
+    permalink: str
+    picture: str = ""
+    reactions: int = 0
+    comments: int = 0
+    shares: int = 0
+
+
 class FacebookClient:
     def __init__(self, page_id: str, access_token: str, api_version: str = "v21.0"):
         self.page_id = page_id
@@ -116,6 +130,42 @@ class FacebookClient:
         """
         body = self._request("GET", f"{self.page_id}?fields=id,name")
         return PageInfo(id=str(body.get("id", "")), name=body.get("name", ""))
+
+    def recent_posts(self, limit: int = 25) -> list[PagePost]:
+        """Các bài mới nhất trên Fanpage.
+
+        Đây là nguồn sự thật cho mục "Đã đăng". DB chỉ biết mình đã GỬI ĐI cái gì;
+        Facebook biết bài hiện ra sao và có bao nhiêu tương tác — mà tương tác mới là
+        thứ cần nhìn để biết nên đăng tiếp kiểu nào.
+
+        `summary(true).limit(0)` lấy đúng con số đếm mà không kéo về từng lượt thả tim
+        hay từng bình luận.
+        """
+        body = self._request("GET", f"{self.page_id}/posts", {
+            "fields": "id,created_time,message,permalink_url,full_picture,"
+                      "reactions.summary(true).limit(0),"
+                      "comments.summary(true).limit(0),shares",
+            "limit": limit,
+        })
+        return [self._page_post(item) for item in body.get("data", [])]
+
+    @staticmethod
+    def _page_post(item: dict) -> PagePost:
+        def counted(field: str) -> int:
+            summary = (item.get(field) or {}).get("summary") or {}
+            return int(summary.get("total_count") or 0)
+
+        return PagePost(
+            id=str(item.get("id", "")),
+            message=item.get("message") or "",
+            created_time=item.get("created_time") or "",
+            permalink=item.get("permalink_url") or "",
+            picture=item.get("full_picture") or "",
+            reactions=counted("reactions"),
+            comments=counted("comments"),
+            # Bài không ai chia sẻ thì Facebook bỏ hẳn trường `shares`, không trả 0.
+            shares=int((item.get("shares") or {}).get("count") or 0),
+        )
 
     def publish_post(self, message: str) -> str:
         """Đăng bài text lên Page. Trả về fb_post_id."""

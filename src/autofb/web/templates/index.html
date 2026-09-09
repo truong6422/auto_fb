@@ -86,6 +86,9 @@
   .tools { display:flex; align-items:flex-start; gap:6px; flex:none; order:1; }
   .edit { order:2; flex-basis:100%; }
   .flag { color:var(--warn); }
+  /* Số tương tác lấy từ Fanpage — thứ duy nhất nói được bài đăng có ăn thua không. */
+  .stat { display:inline-flex; align-items:center; gap:4px; color:var(--muted); }
+  .stat b { color:var(--text); font-weight:600; }
 
   /* ---- sửa bài tại chỗ ---- */
   .edit summary { display:inline-flex; align-items:center; gap:6px; font-size:12.5px;
@@ -178,6 +181,37 @@
   {% endfor %}
 </div>
 
+{% if tab == 'posted' and feed_error %}
+  <div class="card" style="border-color:var(--warn); padding:13px 16px; margin-bottom:14px;
+       color:var(--warn); font-size:13.5px">{{ feed_error }} — đang hiện danh sách lưu trong máy.</div>
+{% endif %}
+
+{% if tab == 'posted' and not feed_error %}
+  {# Đọc thẳng từ Fanpage: ở đây có ảnh thật và số tương tác, thứ DB không biết. #}
+  <div class="card">
+    {% for item in feed %}
+      <div class="item">
+        {% if item.picture %}
+          <a href="{{ item.permalink }}" target="_blank" rel="noopener">
+            <img class="thumb card" src="{{ item.picture }}" alt="" loading="lazy">
+          </a>
+        {% else %}<div class="thumb card ph">không ảnh</div>{% endif %}
+        <div class="body">
+          <div class="headline">{{ item.headline }}</div>
+          <div class="sub">
+            <span>{{ item.age }}</span>
+            <span class="stat">♥ <b>{{ item.reactions }}</b></span>
+            <span class="stat">💬 <b>{{ item.comments }}</b></span>
+            <span class="stat">↗ <b>{{ item.shares }}</b></span>
+            <a href="{{ item.permalink }}" target="_blank" rel="noopener">Xem trên Facebook ↗</a>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="empty">Fanpage chưa có bài nào.</div>
+    {% endfor %}
+  </div>
+{% else %}
 <div class="card">
   {% for post in posts %}
     <div class="item s-{{ post.sport }}">
@@ -251,4 +285,5 @@
     </div>
   {% endfor %}
 </div>
+{% endif %}
 {% endblock %}

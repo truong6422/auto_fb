@@ -17,9 +17,11 @@ class CleanupReport:
     articles: int = 0
     clusters: int = 0
     posts: int = 0
+    trimmed: int = 0
 
     def summary(self) -> str:
-        return f"dọn {self.articles} tin, {self.clusters} chủ đề, {self.posts} bài"
+        base = f"dọn {self.articles} tin, {self.clusters} chủ đề, {self.posts} bài"
+        return base + (f", rút gọn {self.trimmed} bài đã đăng" if self.trimmed else "")
 
 
 def run_cleanup(conn: sqlite3.Connection, retention_days: int) -> CleanupReport:
@@ -31,6 +33,19 @@ def run_cleanup(conn: sqlite3.Connection, retention_days: int) -> CleanupReport:
     # đăng xa trong tương lai — xoá là mất trắng.
     report.posts = conn.execute(
         "DELETE FROM post WHERE status != 'posted' AND origin = 'auto' AND created_at < ?",
+        (cutoff,),
+    ).rowcount
+
+    # Bài ĐÃ ĐĂNG: Facebook giữ bản chính, mục "Đã đăng" đọc thẳng từ Graph API. Ở đây
+    # chỉ cần phần sổ sách, và phải giữ NGUYÊN dòng chứ không xoá:
+    #   ref        — khoá chống trùng; mất nó là planner dựng lại bài bóng đá đã đăng
+    #   fb_post_id — đường lui để thu Insights sau này
+    #   posted_at  — hạn ngạch ngày và giãn cách giữa hai bài đọc từ đây
+    # Bỏ đi nội dung và dữ liệu card: chúng chiếm gần hết dung lượng một dòng mà không
+    # còn ai đọc tới. Dòng còn lại vài chục byte, nghìn bài cũng chưa tới 100KB.
+    report.trimmed = conn.execute(
+        "UPDATE post SET content = '', card_data = NULL, image_url = NULL"
+        " WHERE status = 'posted' AND posted_at < ? AND content != ''",
         (cutoff,),
     ).rowcount
 
