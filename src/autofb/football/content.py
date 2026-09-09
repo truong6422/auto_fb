@@ -36,8 +36,9 @@ def fixtures_post(league: str, round_label: str, fixtures: list[Fixture]) -> dic
             current_day = day
             rows.append({"left": day, "right": "", "dim": True})
             lines.append(f"\n{day}")
-        rows.append({"left": match.short_score_line, "right": match.vn_time,
-                     "icon": match.home_crest})
+        rows.append({"left": match.home_name, "center": match.vn_time,
+                     "right": match.away_name,
+                     "icon": match.home_crest, "right_icon": match.away_crest})
         lines.append(f"{match.vn_time}  {match.home_name} – {match.away_name}")
 
     body = "\n".join(lines).strip()
@@ -86,8 +87,8 @@ def week_results_post(league: str, round_label: str, results: list[Fixture]) -> 
     """Tổng hợp kết quả cả vòng vừa qua, gộp thành một bài."""
     heading = f"KẾT QUẢ {round_label}".strip().upper()
     rows = [
-        {"left": f"{f.home_name} – {f.away_name}",
-         "right": f"{f.home_score}-{f.away_score}", "icon": f.home_crest}
+        {"left": f.home_name, "center": f"{f.home_score} - {f.away_score}",
+         "right": f.away_name, "icon": f.home_crest, "right_icon": f.away_crest}
         for f in results
     ]
     lines = [f"{f.home_name} {f.home_score} - {f.away_score} {f.away_name}" for f in results]

@@ -34,7 +34,13 @@ class Row:
     left: str
     right: str = ""
     dim: bool = False   # dòng phụ (ngày tháng, ghi chú) — chữ nhạt và nhỏ hơn
-    icon: str = ""      # URL logo đội, vẽ trước phần chữ. Rỗng thì chỉ có chữ.
+    icon: str = ""      # URL logo vẽ trước phần chữ bên trái
+    # Có `center` là dòng chuyển sang bố cục TRẬN ĐẤU: logo+tên đội nhà bên trái,
+    # tỉ số (hoặc giờ) chính giữa, tên đội khách+logo bên phải. Bố cục này đọc
+    # nhanh hơn hẳn kiểu "Arsenal – Chelsea .... 2-1" vì mắt bắt tỉ số ở đúng một
+    # vị trí cố định thay vì phải dò sang tận mép phải.
+    center: str = ""
+    right_icon: str = ""
 
 
 def render_table_card(
@@ -116,6 +122,7 @@ def _draw_rows(draw, image, rows: list[Row], margin: int, top: int,
     row_height = (bottom - top) / max(len(rows), 1)
 
     size = min(round(row_height * 0.46), round(width * 0.042))
+    size = _fit_match_size(rows, size, margin, width)
     font = load_font(TITLE_FONT, size)
     dim_font = load_font(LABEL_FONT, round(size * 0.82))
     right_font = load_font(TITLE_FONT, size)
@@ -130,6 +137,11 @@ def _draw_rows(draw, image, rows: list[Row], margin: int, top: int,
 
         left_font = dim_font if row.dim else font
         colour = (255, 255, 255, 175) if row.dim else settings.text_color
+
+        if row.center:
+            _draw_match_row(draw, image, row, y, text_y, row_height, margin,
+                            width, size, font, settings)
+            continue
 
         # Logo đội vẽ trước, chữ lùi vào sau nó.
         x = margin
@@ -147,6 +159,83 @@ def _draw_rows(draw, image, rows: list[Row], margin: int, top: int,
             w = right_font.getlength(row.right)
             draw.text((width - margin - w, text_y), row.right,
                       font=right_font, fill=settings.text_color)
+
+
+def _match_room(size: int, margin: int, width: int, score: str) -> float:
+    """Bề ngang còn lại cho MỘT tên đội ở bố cục trận đấu.
+
+    Phải tính đúng như lúc vẽ, nếu không việc dò cỡ chữ sẽ dựa trên số sai.
+    """
+    gap = round(size * 0.42)
+    logo = round(size * 1.25)
+    font = load_font(TITLE_FONT, size)
+    inner_left = margin + logo + gap
+    half_gap = font.getlength(score) / 2 + gap * 1.6
+    return width / 2 - half_gap - inner_left
+
+
+def _fit_match_size(rows: list[Row], size: int, margin: int, width: int) -> int:
+    """Thu nhỏ chữ tới khi tên đội DÀI NHẤT vừa khung.
+
+    Không làm bước này thì "Crystal Palace", "Nott'm Forest", "Bournemouth" bị cắt
+    thành "Crystal Pal…" — mất tên đội, đúng thứ người đọc cần nhất. Thà cả card
+    chữ nhỏ hơn một chút mà mọi dòng đọc được.
+    """
+    matches = [r for r in rows if r.center]
+    if not matches:
+        return size
+
+    smallest = max(round(size * 0.62), 12)
+    for candidate in range(size, smallest - 1, -1):
+        font = load_font(TITLE_FONT, candidate)
+        if all(
+            max(font.getlength(r.left), font.getlength(r.right))
+            <= _match_room(candidate, margin, width, r.center)
+            for r in matches
+        ):
+            return candidate
+    return smallest
+
+
+def _draw_match_row(draw, image, row: Row, y: float, text_y: float, row_height: float,
+                    margin: int, width: int, size: int, font, settings: CardSettings) -> None:
+    """Một trận: [logo] đội nhà — TỈ SỐ — đội khách [logo].
+
+    Tỉ số căn chính giữa card, không phải giữa khoảng trống giữa hai tên đội: tên
+    đội dài ngắn khác nhau nên căn theo khoảng trống sẽ làm cột tỉ số nhấp nhô.
+    """
+    gap = round(size * 0.42)
+    logo_size = round(size * 1.25)
+    centre = width / 2
+
+    def place(url: str, at_left: bool) -> int:
+        """Dán logo, trả về mép trong của nó để chữ lùi vào."""
+        edge = margin if at_left else width - margin
+        logo = crest.load(url, logo_size) if url else None
+        if logo is None:
+            return edge
+        x = edge if at_left else edge - logo.width
+        image.paste(logo, (x, round(y + (row_height - logo.height) / 2)), logo)
+        return x + logo.width + gap if at_left else x - gap
+
+    inner_left = place(row.icon, True)
+    inner_right = place(row.right_icon, False)
+
+    # Tỉ số vẽ trước để biết nó chiếm bao nhiêu, phần còn lại mới chia cho tên đội.
+    score_width = font.getlength(row.center)
+    draw.text((centre - score_width / 2, text_y), row.center,
+              font=font, fill=settings.text_color)
+
+    half_gap = score_width / 2 + gap * 1.6
+    home_room = centre - half_gap - inner_left
+    away_room = inner_right - (centre + half_gap)
+
+    draw.text((inner_left, text_y), _fit(row.left, font, home_room),
+              font=font, fill=settings.text_color)
+
+    away = _fit(row.right, font, away_room)
+    draw.text((inner_right - font.getlength(away), text_y), away,
+              font=font, fill=settings.text_color)
 
 
 def _right_width(row: Row, font) -> float:

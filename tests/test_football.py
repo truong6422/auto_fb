@@ -211,3 +211,41 @@ class TestLenLich:
 
         one_league(Broken())
         assert planner.create_posts(conn, NOW) == 0   # không ném lỗi ra ngoài
+
+
+class TestBoCucTranDau:
+    """Dòng trận đấu: [logo] đội nhà — TỈ SỐ — đội khách [logo]."""
+
+    def test_ket_qua_dat_ti_so_o_giua(self):
+        match = make_fixture(finished=True, home_score=2, away_score=1)
+        row = content.week_results_post("Ngoại hạng Anh", "Vòng 3", [match])["card_data"]["rows"][0]
+        assert row["left"] == "Arsenal"
+        assert row["center"] == "2 - 1"
+        assert row["right"] == "Chelsea"
+
+    def test_lich_thi_dau_dat_gio_o_giua(self):
+        rows = content.fixtures_post("Ngoại hạng Anh", "Vòng 4", [make_fixture()])["card_data"]["rows"]
+        match_row = next(r for r in rows if r.get("center"))
+        assert match_row["center"] == make_fixture().vn_time
+
+    def test_co_logo_ca_hai_doi(self):
+        """Chỉ một logo thì dòng lệch hẳn về một bên, mà đội khách cũng cần nhận ra."""
+        match = make_fixture(finished=True, home_score=1, away_score=0,
+                             home_crest="http://x/home.png", away_crest="http://x/away.png")
+        row = content.week_results_post("Ngoại hạng Anh", "Vòng 3", [match])["card_data"]["rows"][0]
+        assert row["icon"] == "http://x/home.png"
+        assert row["right_icon"] == "http://x/away.png"
+
+    def test_ten_doi_dai_lam_ca_card_nho_chu_lai(self):
+        """Thà cả card chữ nhỏ hơn còn hơn cắt "Crystal Palace" thành "Crystal Pal…"."""
+        from autofb.football.card import _fit_match_size
+
+        ngan = [Row("Hull", center="1 - 0", right="Spurs")]
+        dai = [Row("Crystal Palace", center="1 - 0", right="Bournemouth")]
+        assert _fit_match_size(dai, 45, 81, 1080) < _fit_match_size(ngan, 45, 81, 1080)
+
+    def test_dong_thuong_khong_bi_anh_huong(self):
+        """Bảng xếp hạng không có center — cỡ chữ giữ nguyên."""
+        from autofb.football.card import _fit_match_size
+
+        assert _fit_match_size([Row("1. Manchester City", "9")], 45, 81, 1080) == 45
