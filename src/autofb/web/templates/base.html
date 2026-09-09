@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}AutoFB{% endblock %}</title>
+{# Favicon nhúng thẳng dạng data URI: không thêm file tĩnh, không thêm route, và
+   không có request thứ hai — box chạy ổ USB chậm nên bớt được lượt đọc file nào
+   hay lượt đó. Hình vuông xoay 45° đúng bằng dấu hiệu cạnh chữ AutoFB.
+   Nền tối cố định để icon vẫn thấy rõ trên tab của trình duyệt nền sáng. #}
+<link rel="icon" href="data:image/svg+xml,
+  %3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E
+  %3Crect width='32' height='32' rx='7' fill='%230b0e13'/%3E
+  %3Crect x='10' y='10' width='12' height='12' rx='3'
+    fill='%235aa2ff' transform='rotate(45 16 16)'/%3E%3C/svg%3E">
 <style>
   /* ============ hệ màu ============
      Nền tối mặc định. Các lớp bề mặt chênh nhau rất ít để tạo chiều sâu mà không
@@ -40,49 +49,89 @@
   a { color:var(--accent); }
   h1,h2,h3 { letter-spacing:-.02em; }
 
-  /* ============ thanh trên ============
-     Hai hàng cố định: hàng 1 nhận diện + nút hành động, hàng 2 là menu chuyển trang.
-     Trước đây tất cả nằm chung một hàng có flex-wrap, nên trên điện thoại nút "Dừng"
-     bị đẩy xuống nằm lẫn vào menu — thứ nguy hiểm nhất lại ở chỗ dễ bấm nhầm nhất. */
-  header { background:color-mix(in srgb, var(--surface) 92%, transparent);
-           backdrop-filter:blur(12px); border-bottom:1px solid var(--line-soft);
-           position:sticky; top:0; z-index:30; }
-  .bar { max-width:980px; margin:0 auto; padding:11px 20px 0;
-         display:flex; align-items:center; gap:12px; }
-  .logo { font-weight:700; font-size:16.5px; letter-spacing:-.03em; text-decoration:none;
-          color:var(--text); display:flex; align-items:center; gap:8px; margin-right:auto; }
-  .logo .mark { width:9px; height:9px; border-radius:3px; background:var(--accent);
-                transform:rotate(45deg); }
-  .logo small { color:var(--faint); font-weight:500; font-size:12px; letter-spacing:0; }
-  .acts { display:flex; align-items:center; gap:7px; flex:none; }
+  /* ============ cột điều hướng bên trái ============
+     Menu dọc bên trái thay vì thanh ngang trên đầu. Lý do không chỉ là thẩm mỹ:
+     màn hình máy tính rộng hơn là cao, cột trái lấy chỗ thừa theo chiều ngang và
+     trả lại chiều cao cho nội dung. Menu cũng không cuộn mất khi kéo trang dài.
 
-  /* ---- menu ---- */
-  .navwrap { max-width:980px; margin:0 auto; padding:0 20px;
-             /* Trên màn hình hẹp menu trượt ngang thay vì xuống dòng: chiều cao
-                thanh trên không đổi thì nội dung bên dưới không bị nhảy. */
-             overflow-x:auto; scrollbar-width:none; }
-  .navwrap::-webkit-scrollbar { display:none; }
-  .nav { display:flex; gap:3px; }
-  .nav a { display:flex; align-items:center; gap:7px; white-space:nowrap;
-           padding:11px 12px 10px; text-decoration:none; font-size:14px;
-           color:var(--muted); font-weight:500; transition:.15s;
-           border-bottom:2px solid transparent; }
-  .nav a svg { width:16px; height:16px; flex:none; stroke:currentColor; fill:none;
+     Điện thoại thì ngược lại — chiều ngang mới là thứ hiếm — nên dưới 860px cột này
+     tự nằm ngang trở lại thành thanh trên (xem @media cuối khối). */
+  .side { position:fixed; inset:0 auto 0 0; width:238px; z-index:30;
+          background:var(--surface); border-right:1px solid var(--line-soft);
+          display:flex; flex-direction:column; padding:18px 12px 14px; }
+
+  .logo { font-weight:700; font-size:16.5px; letter-spacing:-.03em; text-decoration:none;
+          color:var(--text); display:flex; align-items:center; gap:9px;
+          padding:0 10px 18px; }
+  .logo .mark { width:10px; height:10px; border-radius:3px; background:var(--accent);
+                transform:rotate(45deg); flex:none; }
+  .logo small { color:var(--faint); font-weight:500; font-size:12px; letter-spacing:0; }
+
+  .nav { display:flex; flex-direction:column; gap:2px; }
+  .nav a { display:flex; align-items:center; gap:11px; border-radius:10px;
+           padding:9px 11px; text-decoration:none; font-size:14px;
+           color:var(--muted); font-weight:500; transition:.15s; }
+  .nav a svg { width:17px; height:17px; flex:none; stroke:currentColor; fill:none;
                stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
-  .nav a:hover { color:var(--text); }
-  /* Gạch chân thay vì nền: người dùng đọc thanh menu theo hàng ngang, một đường
-     kẻ dưới chỉ đúng một mục rõ hơn là một mảng nền dễ lẫn với nút bấm. */
-  .nav a.on { color:var(--accent); border-bottom-color:var(--accent); }
+  .nav a:hover { color:var(--text); background:var(--raised); }
+  /* Cột dọc thì nền đầy đủ đọc rõ hơn gạch chân: mắt quét theo chiều dọc, một mảng
+     nền nổi bật ngay, còn đường kẻ mảnh dễ trôi qua. */
+  .nav a.on { color:var(--accent); background:var(--accent-dim); }
 
   /* Đếm số bài đang chờ, gắn ngay cạnh mục menu — không phải mở trang mới biết. */
-  .nav .n { font-size:11px; font-weight:700; padding:1px 6px; border-radius:20px;
-            background:var(--raised); color:var(--muted); }
-  .nav a.on .n { background:var(--accent-dim); color:var(--accent); }
+  .nav .n { margin-left:auto; font-size:11px; font-weight:700; padding:1px 7px;
+            border-radius:20px; background:var(--raised); color:var(--muted); }
+  .nav a.on .n { background:var(--surface); color:var(--accent); }
 
-  @media (max-width:560px) {
-    .bar { padding:10px 14px 0; }
-    .navwrap { padding:0 14px; }
-    .logo small { display:none; }
+  /* Nút hành động dồn xuống đáy cột: "Dừng" là nút nguy hiểm nhất, để xa menu
+     điều hướng thì không bấm nhầm khi đang chuyển trang. */
+  .acts { margin-top:auto; padding-top:14px; border-top:1px solid var(--line-soft);
+          display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+  /* "Chạy ngay" chiếm trọn một hàng, hàng dưới là đổi nền + Dừng. Nhồi cả ba vào
+     một hàng rộng 214px thì chữ bị xuống dòng giữa nút. */
+  .acts .kpi { flex-basis:100%; }
+  .acts .kpi:empty { display:none; }
+  .acts .kpi form, .acts .kpi button { width:100%; }
+  .acts > form { flex:1; }
+  .acts > form button { width:100%; }
+
+  .shell { margin-left:238px; }
+
+  @media (max-width:860px) {
+    /* Điện thoại: cột trái duỗi thành thanh trên. Menu trượt ngang thay vì xuống
+       dòng để chiều cao thanh không đổi, nội dung bên dưới không bị nhảy. */
+    .side { position:sticky; inset:0 0 auto 0; width:auto; padding:10px 14px 0;
+            border-right:none; border-bottom:1px solid var(--line-soft);
+            background:color-mix(in srgb, var(--surface) 92%, transparent);
+            backdrop-filter:blur(12px); }
+    .logo { padding:0 0 10px; }
+    /* Màn hẹp: bỏ chữ phụ, nếu không "Sport Hub" xuống dòng và đội cao cả thanh.
+       Bỏ luôn icon trong menu — 4 mục kèm icon chỉ hiện được 2 trên màn 390px,
+       người dùng tưởng chỉ có bấy nhiêu. Không icon thì đủ chỗ cho cả 4. */
+    @media (max-width:560px) {
+      .logo small { display:none; }
+      .nav a svg { display:none; }
+      .nav a { padding:9px 9px 8px; font-size:13.5px; }
+    }
+    /* grid-column 1/-1: menu phải trải hết bề ngang. Nằm trong cột 1fr thì nó bị
+       hàng nút bóp lại còn một mẩu, người dùng chỉ thấy đúng mục đầu tiên và không
+       có dấu hiệu nào cho biết còn mục khác ở bên phải. */
+    .nav { grid-column:1 / -1; flex-direction:row; gap:3px;
+           overflow-x:auto; scrollbar-width:none;
+           order:3; margin:0 -14px; padding:0 14px; }
+    .nav::-webkit-scrollbar { display:none; }
+    .nav a { border-radius:0; padding:9px 11px 8px; white-space:nowrap;
+             border-bottom:2px solid transparent; }
+    .nav a:hover, .nav a.on { background:transparent; }
+    .nav a.on { border-bottom-color:var(--accent); }
+    .nav .n { margin-left:0; }
+    /* Hàng nút nằm cùng dòng với logo, tách khỏi menu bên dưới. */
+    .side { display:grid; grid-template-columns:1fr auto; align-items:center; }
+    .acts { margin-top:0; padding-top:0; border-top:none; padding-bottom:10px;
+            flex-wrap:nowrap; }
+    .acts .kpi { flex-basis:auto; }
+    .acts > form { flex:none; }
+    .shell { margin-left:0; }
   }
 
   /* ============ nút ============ */
@@ -102,9 +151,10 @@
   .icon:hover { color:var(--text); background:var(--raised); }
   .small { font-size:13px; padding:6px 12px; border-radius:8px; }
 
-  /* Cùng bề ngang với thanh trên, nếu không menu và nội dung lệch mép nhau. */
-  main { max-width:980px; margin:0 auto; padding:22px 20px 60px; }
-  @media (max-width:560px) { main { padding:18px 14px 60px; } }
+  /* Giới hạn bề ngang dòng đọc. Không để nội dung giãn hết màn hình 27 inch —
+     tiêu đề bài dài cả gang tay thì mắt phải quét ngang rất mệt. */
+  main { max-width:940px; padding:24px 28px 60px; }
+  @media (max-width:860px) { main { padding:18px 14px 60px; } }
 
   /* ============ khối ============ */
   .card { background:var(--surface); border:1px solid var(--line-soft); border-radius:14px;
@@ -139,31 +189,12 @@
 </head>
 <body>
 
-{% if paused %}<div class="banner">Hệ thống đang tạm dừng — không bài nào được đăng</div>{% endif %}
+<aside class="side">
+  <a class="logo" href="/">
+    <span class="mark"></span>AutoFB <small>Sport Hub</small>
+  </a>
 
-<header>
-  <div class="bar">
-    <a class="logo" href="/">
-      <span class="mark"></span>AutoFB <small>Sport Hub</small>
-    </a>
-    <div class="acts">
-      {% block kpi %}{% endblock %}
-      <button class="icon" id="theme" title="Đổi nền sáng/tối" aria-label="Đổi nền sáng tối">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-             stroke-width="1.9" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3
-             a7 7 0 0 0 9.8 9.8z"/></svg>
-      </button>
-      <form class="inline" method="post" action="/toggle-pause">
-        <button class="{{ 'primary' if paused else 'danger' }}" type="submit"
-                title="{{ 'Cho hệ thống chạy lại' if paused else 'Dừng khẩn cấp — không đăng bài nào nữa' }}">
-          {{ 'Chạy lại' if paused else 'Dừng' }}
-        </button>
-      </form>
-    </div>
-  </div>
-
-  <div class="navwrap">
-    <nav class="nav">
+  <nav class="nav">
       {# Số bên cạnh là thứ cần liếc thấy nhất ở mỗi mục: bao nhiêu bài đang chờ,
          bao nhiêu bài hẹn giờ, bao nhiêu link đang bật. #}
       <a href="/" class="{{ 'on' if page == 'posts' }}">
@@ -195,11 +226,30 @@
                 transform="translate(0.6 0.6) scale(0.94)"/></svg>
         Cài đặt
       </a>
-    </nav>
-  </div>
-</header>
+  </nav>
 
-<main>{% block content %}{% endblock %}</main>
+  <div class="acts">
+    <div class="kpi">{% block kpi %}{% endblock %}</div>
+    <button class="icon" id="theme" title="Đổi nền sáng/tối" aria-label="Đổi nền sáng tối">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+           stroke-width="1.9" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3
+           a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+    <form class="inline" method="post" action="/toggle-pause">
+      <button class="{{ 'primary' if paused else 'danger' }}" type="submit"
+              title="{{ 'Cho hệ thống chạy lại' if paused else 'Dừng khẩn cấp — không đăng bài nào nữa' }}">
+        {{ 'Chạy lại' if paused else 'Dừng' }}
+      </button>
+    </form>
+  </div>
+</aside>
+
+<div class="shell">
+  {% if paused %}
+    <div class="banner">Hệ thống đang tạm dừng — không bài nào được đăng</div>
+  {% endif %}
+  <main>{% block content %}{% endblock %}</main>
+</div>
 
 <script>
 const root = document.documentElement;
