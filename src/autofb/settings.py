@@ -16,17 +16,40 @@ from .config import PROJECT_ROOT
 ENV_PATH = PROJECT_ROOT / ".env"
 
 
-def load_env(path: Path | None = None) -> None:
-    """Nạp .env vào os.environ. Biến môi trường có sẵn được ưu tiên, không ghi đè."""
+def read_env_file(path: Path | None = None) -> dict[str, str]:
+    """Đọc .env thành dict. Không đụng os.environ."""
     path = path or ENV_PATH
     if not path.exists():
-        return
+        return {}
+    values: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+        values[key.strip()] = value.strip().strip("\"'")
+    return values
+
+
+def load_env(path: Path | None = None) -> None:
+    """Nạp .env vào os.environ. Biến môi trường có sẵn được ưu tiên, không ghi đè."""
+    for key, value in read_env_file(path).items():
+        os.environ.setdefault(key, value)
+
+
+def current_value(key: str, default: str = "") -> str:
+    """Giá trị đang có hiệu lực của một biến bí mật, ĐỌC LẠI FILE mỗi lần gọi.
+
+    FILE THẮNG BIẾN MÔI TRƯỜNG — cố ý ngược với thông lệ. Lý do: ba container đọc
+    biến môi trường từ `env_file`, mà Docker chỉ nạp nó MỘT LẦN lúc tạo container.
+    Đổi token trong .env rồi chỉ tạo lại một container là hai container còn lại vẫn
+    ôm token cũ, và giao diện báo "token hỏng" trong khi bot vẫn đăng bài bình thường.
+
+    Đọc lại file ở mỗi lần gọi thì sửa .env là mọi tiến trình thấy ngay lượt sau.
+    File .env được gắn vào container ở chế độ chỉ đọc (xem docker-compose.yml).
+    Không có file thì rơi về biến môi trường như cũ.
+    """
+    return (read_env_file().get(key) or os.environ.get(key, default)).strip()
 
 
 @dataclass(frozen=True)
@@ -48,11 +71,11 @@ class FacebookSettings:
 
 
 def load_facebook_settings() -> FacebookSettings:
-    load_env()
+    """Đọc cấu hình Facebook. Gọi lại ở mỗi lượt chạy — token đổi là có hiệu lực ngay."""
     return FacebookSettings(
-        page_id=os.environ.get("FB_PAGE_ID", "").strip(),
-        access_token=os.environ.get("FB_PAGE_ACCESS_TOKEN", "").strip(),
-        api_version=os.environ.get("FB_API_VERSION", "v21.0").strip() or "v21.0",
+        page_id=current_value("FB_PAGE_ID"),
+        access_token=current_value("FB_PAGE_ACCESS_TOKEN"),
+        api_version=current_value("FB_API_VERSION", "v21.0") or "v21.0",
     )
 
 

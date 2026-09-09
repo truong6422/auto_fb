@@ -9,12 +9,13 @@ báo vào log rồi vẫn chạy thì sẽ không ai đọc cái log đó, và t
 """
 
 import hmac
-import os
 import secrets
 from base64 import b64decode
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import PlainTextResponse, Response
+
+from ..settings import current_value
 
 # Đường không cần đăng nhập: Docker healthcheck gọi vào đây, nó không có mật khẩu.
 PUBLIC_PATHS = frozenset({"/healthz"})
@@ -23,8 +24,9 @@ _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": 'Basic realm="AutoFB", charset="UTF
 
 
 def _credentials() -> tuple[str, str] | None:
-    user = os.environ.get("AUTOFB_USER", "admin").strip()
-    password = os.environ.get("AUTOFB_PASSWORD", "").strip()
+    """Đọc lại .env mỗi request — đổi mật khẩu không phải tạo lại container."""
+    user = current_value("AUTOFB_USER", "admin") or "admin"
+    password = current_value("AUTOFB_PASSWORD")
     return (user, password) if password else None
 
 

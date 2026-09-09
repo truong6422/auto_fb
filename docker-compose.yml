@@ -18,6 +18,10 @@ x-autofb: &autofb
     - ./data:/app/data
     # sources.yaml sửa xong chỉ cần restart, không phải build lại ảnh.
     - ./config/sources.yaml:/app/config/sources.yaml:ro
+    # .env gắn vào chứ không chỉ dựa vào env_file: Docker nạp env_file MỘT LẦN lúc
+    # tạo container, nên đổi token mà chỉ tạo lại một dịch vụ là hai dịch vụ kia vẫn
+    # ôm token cũ. Có file này thì cả ba đọc lại ở lượt sau, không phải tạo lại gì.
+    - ./.env:/app/.env:ro
   labels:
     # Chỉ Watchtower mới tự cập nhật mấy container có nhãn này — adguard và shop3d
     # trên cùng box phải để yên.
